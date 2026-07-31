@@ -4,12 +4,13 @@ import {
   ArrowLeft, CheckCircle2, ChevronRight, School,
   User, Lock, Mail, Upload, FileText, AtSign
 } from 'lucide-react';
-import { useSignUp } from '@clerk/clerk-react';
+import { useSignUp, useSignIn } from '@clerk/clerk-react';
 import { searchUniversities } from '../services/universityService';
 import { API_BASE_URL } from '../lib/api';
 
 export default function SignupScreen({ onNavigate }) {
   const { signUp, setActive, isLoaded } = useSignUp();
+  const { signIn, isLoaded: isSignInLoaded } = useSignIn();
 
   const [step, setStep] = useState(1);
   const [studentIdFile, setStudentIdFile] = useState(null);
@@ -26,6 +27,7 @@ export default function SignupScreen({ onNavigate }) {
   // Email verification step (shown after Clerk sends OTP)
   const [verificationStep, setVerificationStep] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -61,7 +63,7 @@ export default function SignupScreen({ onNavigate }) {
   // Step 2: Create Clerk account
   const handleStep2Submit = async (e) => {
     e.preventDefault();
-    if (!isLoaded) return;
+    if (!isLoaded || !isSignInLoaded) return;
     setError('');
 
     if (!formData.name.trim()) { setError('Please enter your full name.'); return; }
@@ -78,6 +80,10 @@ export default function SignupScreen({ onNavigate }) {
 
     setIsSubmitting(true);
     try {
+      // Save details to localStorage immediately in case of successful signup or auto-login fallback
+      localStorage.setItem('pending_uni', formData.university?.name || 'Campus Member');
+      localStorage.setItem('pending_username', formData.username.trim().toLowerCase());
+
       const nameParts = formData.name.trim().split(' ');
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(' ') || '';
@@ -92,13 +98,39 @@ export default function SignupScreen({ onNavigate }) {
 
       // Send email verification code
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      setIsSigningIn(false); // We are doing signUp verification
       setVerificationStep(true);
     } catch (err) {
       const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || '';
       if (msg.includes('already') || msg.includes('taken') || msg.includes('exists')) {
-        setError('An account with this email or username already exists. Try signing in.');
-      } else if (msg.includes('password')) {
-        setError('Password is too weak. Use at least 8 characters with a mix of letters and numbers.');
+        // Attempt to auto-login the user since the account already exists
+        try {
+          const result = await signIn.create({
+            identifier: formData.email.trim(),
+            password: formData.password,
+          });
+
+          if (result.status === 'complete') {
+            await setActive({ session: result.createdSessionId });
+            return;
+          } else if (result.status === 'needs_first_factor') {
+            // If they need verification on their existing account, send them verification code
+            const emailFactor = result.supportedFirstFactors?.find(f => f.strategy === 'email_code');
+            if (emailFactor) {
+              await signIn.prepareFirstFactor({
+                strategy: 'email_code',
+                emailAddressId: emailFactor.emailAddressId
+              });
+              // Toggle to verification code flow (in context of signIn session)
+              setIsSigningIn(true); // We are doing signIn verification
+              setVerificationStep(true);
+              return;
+            }
+          }
+          setError('Account already exists, but sign-in is incomplete. Please sign in directly.');
+        } catch (signInErr) {
+          setError('Account already exists. Incorrect password entered.');
+        }
       } else {
         setError(msg || 'Registration failed. Please try again.');
       }
@@ -115,7 +147,15 @@ export default function SignupScreen({ onNavigate }) {
     setIsSubmitting(true);
 
     try {
-      const result = await signUp.attemptEmailAddressVerification({ code: verificationCode });
+      let result;
+      if (isSigningIn) {
+        result = await signIn.attemptFirstFactor({
+          strategy: 'email_code',
+          code: verificationCode,
+        });
+      } else {
+        result = await signUp.attemptEmailAddressVerification({ code: verificationCode });
+      }
 
       if (result.status === 'complete') {
         // Save details to localStorage to let App.jsx handle the backend PUT/sync once the session is active
