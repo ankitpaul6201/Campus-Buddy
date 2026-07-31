@@ -26,6 +26,7 @@ export default function App() {
   // Clerk auth state
   const { user, isLoaded: isUserLoaded } = useUser();
   const { isSignedIn, signOut } = useAuth();
+  const [dbUser, setDbUser] = useState(null);
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -41,6 +42,7 @@ export default function App() {
       setCurrentScreen('main');
     } else {
       setCurrentScreen('welcome');
+      setDbUser(null);
     }
   }, [isSignedIn, isUserLoaded]);
 
@@ -94,11 +96,78 @@ export default function App() {
   // Build a user object for screens that display profile info
   const userForScreens = user ? {
     ...user,
-    name: user.fullName || user.username,
+    name: user.fullName || user.username || 'Student',
+    fullName: user.fullName,
     username: user.username,
     email: user.emailAddresses?.[0]?.emailAddress,
     avatar: user.imageUrl,
+    hasImage: user.hasImage,
+    universityName: dbUser?.universityName || user.publicMetadata?.universityName || 'Campus Member',
   } : null;
+
+  const { getToken } = useAuth();
+
+  // Sync user profile with backend on sign in / handle post-signup university save
+  useEffect(() => {
+    if (!isUserLoaded || !isSignedIn || !user) return;
+
+    const syncProfile = async () => {
+      const pendingUni = localStorage.getItem('pending_uni');
+      const pendingUsername = localStorage.getItem('pending_username');
+      const token = await getToken();
+
+      // If we have a pending university registration to save to the database
+      if (pendingUni) {
+        try {
+          const { API_BASE_URL } = await import('./lib/api');
+          
+          const res = await fetch(`${API_BASE_URL}/auth/me/university`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              universityName: pendingUni,
+              username: pendingUsername || user.username
+            })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.universityName) {
+              setDbUser(prev => prev ? { ...prev, universityName: data.universityName } : { universityName: data.universityName });
+            }
+          }
+
+          // Clear the pending localStorage flags
+          localStorage.removeItem('pending_uni');
+          localStorage.removeItem('pending_username');
+
+          // Reload Clerk user so the publicMetadata is immediately updated on the client
+          await user.reload();
+        } catch (err) {
+          console.error('Error saving university details:', err);
+        }
+      } else {
+        // Just normal login profile sync (auto-creates local profile on first login)
+        try {
+          const { API_BASE_URL } = await import('./lib/api');
+          const syncRes = await fetch(`${API_BASE_URL}/auth/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (syncRes.ok) {
+            const data = await syncRes.json();
+            setDbUser(data);
+          }
+        } catch (err) {
+          console.error('Error syncing backend profile:', err);
+        }
+      }
+    };
+
+    syncProfile();
+  }, [isSignedIn, isUserLoaded, user]);
 
   // Show bottom nav bar only for main tab screens
   const showBottomNav = currentScreen === 'main' && ['home', 'chats', 'sell', 'myads', 'profile'].includes(activeNav);

@@ -1,3 +1,7 @@
+const dns = require('dns');
+// Set public DNS servers (8.8.8.8, 1.1.1.1) to resolve Windows SRV query issues
+dns.setServers(['8.8.8.8', '1.1.1.1']);
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');

@@ -19,11 +19,9 @@ import WishlistScreen from './WishlistScreen';
 import NotificationsScreen from './NotificationsScreen';
 import { fetchProducts } from '../lib/api';
 
-export default function HomeScreen({ user, onNavigate }) {
+export default function HomeScreen({ user, activeNav, setActiveNav, favorites, setFavorites, onNavigate }) {
   const [activeTab, setActiveTab] = useState('all');
-  const [activeNav, setActiveNav] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
-  const [favorites, setFavorites] = useState(['card-2']);
   const [dbProducts, setDbProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
@@ -128,12 +126,18 @@ export default function HomeScreen({ user, onNavigate }) {
       {/* 1. TOP HEADER BAR - BROUGHT DOWN CLEANLY WITH TOP SAFE PADDING */}
       <div className="pt-12 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 min-w-[44px] max-w-[44px] min-h-[44px] max-h-[44px] aspect-square rounded-full overflow-hidden shrink-0 border border-slate-200 shadow-2xs">
-            <img 
-              src={user?.avatar || user?.picture || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"} 
-              alt="Profile" 
-              className="w-full h-full object-cover shrink-0"
-            />
+          <div className="w-11 h-11 min-w-[44px] max-w-[44px] min-h-[44px] max-h-[44px] aspect-square rounded-full overflow-hidden shrink-0 border border-slate-200 shadow-2xs flex items-center justify-center bg-[#1944F1] text-white font-bold text-lg select-none">
+            {user?.hasImage && user?.avatar ? (
+              <img 
+                src={user.avatar} 
+                alt="Profile" 
+                className="w-full h-full object-cover shrink-0"
+              />
+            ) : (
+              <span className="uppercase leading-none">
+                {(user?.fullName || user?.name || user?.username || 'S').charAt(0)}
+              </span>
+            )}
           </div>
           <div className="text-left">
             <h2 className="text-sm sm:text-base font-bold text-slate-900 font-sans leading-tight">
@@ -245,9 +249,6 @@ export default function HomeScreen({ user, onNavigate }) {
           <h3 className="text-base font-bold text-slate-900 font-sans">
             Fresh on Campus
           </h3>
-          <span className="text-xs font-semibold text-slate-400">
-            {user?.universityName || user?.campusName || 'Campus'}
-          </span>
         </div>
 
         {/* Dynamic Product Grid / Clean Empty State */}

@@ -118,27 +118,12 @@ export default function SignupScreen({ onNavigate }) {
       const result = await signUp.attemptEmailAddressVerification({ code: verificationCode });
 
       if (result.status === 'complete') {
+        // Save details to localStorage to let App.jsx handle the backend PUT/sync once the session is active
+        localStorage.setItem('pending_uni', formData.university?.name || 'Campus Member');
+        localStorage.setItem('pending_username', formData.username.trim().toLowerCase());
+
         // Activate Clerk session
         await setActive({ session: result.createdSessionId });
-
-        // Save university to backend campus profile
-        try {
-          const token = await result.createdSessionId; // we'll use getToken below
-          // Best effort — if this fails the user can update later
-          await fetch(`${API_BASE_URL}/auth/me/university`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              // Note: auth token is now active via the session, backend reads it via clerkMiddleware
-            },
-            body: JSON.stringify({
-              universityName: formData.university?.name || 'Campus Member',
-              username: formData.username.trim().toLowerCase(),
-            }),
-          });
-        } catch {
-          // Non-fatal — campus profile will be created on next /me call
-        }
 
         // App.jsx detects isSignedIn=true and navigates to 'main' automatically
       } else {

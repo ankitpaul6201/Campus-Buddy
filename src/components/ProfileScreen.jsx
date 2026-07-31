@@ -181,13 +181,13 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, onNavigat
 
           <div className="text-center space-y-1">
             <h1 className="text-2xl font-bold text-white tracking-tight">
-              {user?.fullName || "Alex Rivera"}
+              {user?.fullName || user?.name || "Student"}
             </h1>
             <p className="text-xs text-blue-100/90 font-medium">
-              Computer Science • Class of 2026
+              @{user?.username || "campus_member"}
             </p>
             <p className="text-[11px] text-blue-200/70 font-normal">
-              Stanford University • alex.rivera@stanford.edu
+              {user?.universityName || "Campus Member"} • {user?.email || ""}
             </p>
           </div>
         </div>
@@ -195,12 +195,18 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, onNavigat
         {/* Profile Avatar Card */}
         <div className="flex justify-center -mt-12 mb-4 relative z-10">
           <div className="relative">
-            <div className="w-24 h-24 rounded-full border-4 border-white bg-slate-200 overflow-hidden shadow-xl">
-              <img 
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80" 
-                alt="Profile Avatar"
-                className="w-full h-full object-cover"
-              />
+            <div className="w-24 h-24 rounded-full border-4 border-white bg-slate-200 overflow-hidden shadow-xl flex items-center justify-center text-white bg-[#1944F1] font-bold text-3xl select-none">
+              {user?.hasImage && user?.avatar ? (
+                <img 
+                  src={user.avatar} 
+                  alt="Profile Avatar"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="uppercase">
+                  {(user?.fullName || user?.name || user?.username || 'S').charAt(0)}
+                </span>
+              )}
             </div>
             
             <div className="absolute bottom-0 right-0 bg-[#1944F1] text-white p-1 rounded-full border-2 border-white shadow-md" title="Verified Student">
