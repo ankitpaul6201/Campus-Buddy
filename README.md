@@ -205,4 +205,4 @@ Sign In  Sign Up  ← Must register first
 
 ## 📄 License
 
-MIT © [Ankit Paul](https://github.com/ankitpaul6201)
+Apache 2.0 © [Ankit Paul](https://github.com/ankitpaul6201)
