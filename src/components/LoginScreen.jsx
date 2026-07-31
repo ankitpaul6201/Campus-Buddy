@@ -1,20 +1,23 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
-import { loginUser, saveAuthSession } from '../lib/api';
+import { useSignIn } from '@clerk/clerk-react';
 
-export default function LoginScreen({ onNavigate, onLoginSuccess }) {
-  const [username, setUsername] = useState('');
+export default function LoginScreen({ onNavigate }) {
+  const { signIn, setActive, isLoaded } = useSignIn();
+
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isLoaded) return;
     setError('');
 
-    if (!username.trim()) {
-      setError('Please enter your username or college email.');
+    if (!identifier.trim()) {
+      setError('Please enter your email.');
       return;
     }
     if (!password.trim()) {
@@ -24,23 +27,34 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
 
     setLoading(true);
     try {
-      const res = await loginUser({ username, password });
-      setLoading(false);
-      if (res && res.user) {
-        if (onLoginSuccess) {
-          onLoginSuccess(res.user);
-        }
+      const result = await signIn.create({
+        identifier: identifier.trim(),
+        password,
+      });
+
+      if (result.status === 'complete') {
+        // Clerk session is active — App.jsx useEffect will detect isSignedIn=true
+        await setActive({ session: result.createdSessionId });
       } else {
-        setError('Account not found. Please sign up first before signing in.');
+        // Shouldn't happen for password-based login but handle gracefully
+        setError('Login incomplete. Please try again.');
       }
     } catch (err) {
+      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || '';
+      if (msg.includes('No account') || msg.includes('not found') || msg.includes('identifier')) {
+        setError("No account found. Please sign up first before signing in.");
+      } else if (msg.includes('password') || msg.includes('incorrect')) {
+        setError('Incorrect password. Please try again.');
+      } else {
+        setError(msg || 'Sign in failed. Please check your details and try again.');
+      }
+    } finally {
       setLoading(false);
-      setError(err.message || 'Account not found. Please sign up first before signing in.');
     }
   };
 
   return (
-    <motion.div 
+    <motion.div
       key="login-screen"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -57,7 +71,7 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
-          
+
           <button
             onClick={() => onNavigate('signup')}
             className="text-white font-medium text-sm hover:opacity-90 transition-opacity"
@@ -82,7 +96,7 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
           {error && (
             <div className="p-3.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-xs sm:text-sm font-normal leading-relaxed">
               {error}
-              {(error.includes('sign up') || error.includes('Sign up')) && (
+              {error.includes('sign up') && (
                 <button
                   type="button"
                   onClick={() => onNavigate('signup')}
@@ -96,10 +110,11 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
 
           <div className="relative">
             <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username or College Email"
+              type="email"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="College Email"
+              autoComplete="email"
               className="w-full px-5 py-4 bg-[#F3F4F6] text-slate-900 placeholder-slate-400 rounded-2xl text-base font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all"
             />
           </div>
@@ -110,6 +125,7 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
+              autoComplete="current-password"
               className="w-full px-5 py-4 bg-[#F3F4F6] text-slate-900 placeholder-slate-400 rounded-2xl text-base font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all"
             />
           </div>
@@ -125,7 +141,7 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !isLoaded}
             className="w-full py-4 px-6 rounded-2xl bg-[#0F0F0F] hover:bg-black text-white font-semibold text-base shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
           >
             <span>{loading ? 'Signing In...' : 'Sign In'}</span>
@@ -147,7 +163,6 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
           </p>
         </div>
       </div>
-
     </motion.div>
   );
 }

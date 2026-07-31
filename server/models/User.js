@@ -1,7 +1,14 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 
+// User model is now a campus profile — auth identity is managed by Clerk.
+// clerkId links this document to the Clerk user.
 const userSchema = new mongoose.Schema({
+  clerkId: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true
+  },
   username: {
     type: String,
     required: true,
@@ -16,35 +23,18 @@ const userSchema = new mongoose.Schema({
     trim: true,
     lowercase: true
   },
-  password: {
-    type: String,
-    required: true
-  },
   fullName: {
     type: String,
     required: true
   },
   universityName: {
     type: String,
-    default: 'Stanford University'
+    default: 'Campus Member'
   },
   avatar: {
     type: String,
-    default: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80'
+    default: ''
   }
 }, { timestamps: true });
-
-// Hash password before saving
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
-
-// Method to compare passwords
-userSchema.methods.comparePassword = async function (candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
-};
 
 module.exports = mongoose.model('User', userSchema);

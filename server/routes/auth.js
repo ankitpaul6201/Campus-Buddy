@@ -1,102 +1,89 @@
 const express = require('express');
 const router = express.Router();
-const jwt = require('jsonwebtoken');
+const { clerkClient } = require('@clerk/express');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
 
-// Helper to issue JWT Token
-const generateToken = (user) => {
-  return jwt.sign(
-    { id: user._id, username: user.username, email: user.email },
-    process.env.JWT_SECRET || 'fallback_secret',
-    { expiresIn: '30d' }
-  );
-};
-
-// @route   POST /api/auth/signup
-// @desc    Register a new student
-router.post('/signup', async (req, res) => {
-  try {
-    const { username, email, password, fullName, universityName } = req.body;
-
-    // Check if user already exists
-    let existingUser = await User.findOne({ $or: [{ email }, { username }] });
-    if (existingUser) {
-      return res.status(400).json({ error: 'User with this email or username already exists' });
-    }
-
-    const user = new User({
-      username,
-      email,
-      password,
-      fullName: fullName || username,
-      universityName: universityName || 'Stanford University'
-    });
-
-    await user.save();
-    const token = generateToken(user);
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        fullName: user.fullName,
-        universityName: user.universityName,
-        avatar: user.avatar
-      }
-    });
-  } catch (err) {
-    console.error('Signup error:', err);
-    res.status(500).json({ error: 'Server error during sign up' });
-  }
-});
-
-// @route   POST /api/auth/login
-// @desc    Authenticate user & get token
-router.post('/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-
-    const user = await User.findOne({ $or: [{ username }, { email: username }] });
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-
-    const token = generateToken(user);
-
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        fullName: user.fullName,
-        universityName: user.universityName,
-        avatar: user.avatar
-      }
-    });
-  } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Server error during sign in' });
-  }
-});
-
 // @route   GET /api/auth/me
-// @desc    Get logged in user profile
+// @desc    Get the current user's campus profile (synced with Clerk identity)
+// @access  Private (Clerk token required)
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
+    const { userId } = req.auth;
+
+    // Check if we have a local campus profile for this Clerk user
+    let campusUser = await User.findOne({ clerkId: userId });
+
+    if (!campusUser) {
+      // First login after Clerk signup — fetch from Clerk and create local profile
+      const clerkUser = await clerkClient.users.getUser(userId);
+      const email = clerkUser.emailAddresses?.[0]?.emailAddress || '';
+      const username = clerkUser.username || email.split('@')[0].toLowerCase().replace(/\s+/g, '');
+
+      campusUser = new User({
+        clerkId: userId,
+        username,
+        email,
+        fullName: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || username,
+        universityName: clerkUser.publicMetadata?.universityName || 'Campus Member',
+        avatar: clerkUser.imageUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+      });
+      await campusUser.save();
+    }
+
+    res.json({
+      id: campusUser._id,
+      clerkId: campusUser.clerkId,
+      username: campusUser.username,
+      email: campusUser.email,
+      fullName: campusUser.fullName,
+      universityName: campusUser.universityName,
+      avatar: campusUser.avatar,
+    });
   } catch (err) {
+    console.error('Error fetching user profile:', err);
     res.status(500).json({ error: 'Server error fetching user profile' });
+  }
+});
+
+// @route   PUT /api/auth/me/university
+// @desc    Update the university for the current user (called after Clerk signup step 2)
+// @access  Private
+router.put('/me/university', authMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.auth;
+    const { universityName, username } = req.body;
+
+    let campusUser = await User.findOne({ clerkId: userId });
+
+    if (!campusUser) {
+      // Create the profile if it doesn't exist yet
+      const clerkUser = await clerkClient.users.getUser(userId);
+      const email = clerkUser.emailAddresses?.[0]?.emailAddress || '';
+      campusUser = new User({
+        clerkId: userId,
+        username: username || email.split('@')[0].toLowerCase(),
+        email,
+        fullName: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim(),
+        universityName: universityName || 'Campus Member',
+        avatar: clerkUser.imageUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+      });
+    } else {
+      if (universityName) campusUser.universityName = universityName;
+      if (username) campusUser.username = username;
+    }
+
+    await campusUser.save();
+
+    // Also persist universityName to Clerk public metadata so it's available everywhere
+    await clerkClient.users.updateUserMetadata(userId, {
+      publicMetadata: { universityName: campusUser.universityName },
+    });
+
+    res.json({ success: true, universityName: campusUser.universityName });
+  } catch (err) {
+    console.error('Error updating university:', err);
+    res.status(500).json({ error: 'Failed to update university' });
   }
 });
 

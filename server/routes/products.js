@@ -69,7 +69,7 @@ router.post('/', authMiddleware, async (req, res) => {
       category,
       condition,
       images,
-      seller: req.user.id
+      seller: req.auth.userId
     });
 
     await product.save();

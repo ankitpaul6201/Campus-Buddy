@@ -1,17 +1,15 @@
-const jwt = require('jsonwebtoken');
+const { getAuth } = require('@clerk/express');
 
+// Clerk auth middleware — verifies the Bearer token issued by Clerk
+// Replaces the old jsonwebtoken-based auth
 module.exports = function (req, res, next) {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
+  const { userId } = getAuth(req);
 
-  if (!token) {
+  if (!userId) {
     return res.status(401).json({ error: 'No authorization token, access denied' });
   }
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
-    req.user = decoded;
-    next();
-  } catch (err) {
-    res.status(401).json({ error: 'Token is invalid or expired' });
-  }
+  // Attach userId to req so routes can use req.auth.userId
+  req.auth = { userId };
+  next();
 };

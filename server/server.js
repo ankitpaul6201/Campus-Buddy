@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const { clerkMiddleware } = require('@clerk/express');
 require('dotenv').config();
 
 const app = express();
@@ -12,6 +13,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json({ limit: '10mb' }));
+
+// Clerk middleware — must be before routes so req.auth is populated on all requests
+app.use(clerkMiddleware());
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));

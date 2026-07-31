@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
+import { useUser, useAuth } from '@clerk/clerk-react';
 import SplashScreen from './components/SplashScreen';
 import WelcomeScreen from './components/WelcomeScreen';
 import LoginScreen from './components/LoginScreen';
@@ -13,30 +14,35 @@ import SellScreen from './components/SellScreen';
 import MyAdsScreen from './components/MyAdsScreen';
 import ProfileScreen from './components/ProfileScreen';
 import WishlistScreen from './components/WishlistScreen';
-import { getStoredUser, fetchUserProfile, logoutAuthSession, saveAuthSession } from './lib/api';
+import NotificationsScreen from './components/NotificationsScreen';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('welcome'); // 'welcome' -> 'login'/'signup' -> 'main'
-  const [activeNav, setActiveNav] = useState('home'); // 'home', 'chats', 'sell', 'myads', 'profile', 'wishlist', 'notifications'
+  const [currentScreen, setCurrentScreen] = useState('welcome');
+  const [activeNav, setActiveNav] = useState('home');
   const [favorites, setFavorites] = useState(['card-2']);
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef = useRef(0);
 
-  const [user, setUser] = useState(null);
+  // Clerk auth state
+  const { user, isLoaded: isUserLoaded } = useUser();
+  const { isSignedIn, signOut } = useAuth();
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       StatusBar.setStyle({ style: Style.Light }).catch(() => {});
       StatusBar.setBackgroundColor({ color: '#FFFFFF' }).catch(() => {});
     }
-
-    // Instant smooth auto restore persistent login session
-    const stored = getStoredUser();
-    if (stored) {
-      setUser(stored);
-      setCurrentScreen('main');
-    }
   }, []);
+
+  // Automatically switch screens based on Clerk session
+  useEffect(() => {
+    if (!isUserLoaded) return; // wait for Clerk to initialise
+    if (isSignedIn) {
+      setCurrentScreen('main');
+    } else {
+      setCurrentScreen('welcome');
+    }
+  }, [isSignedIn, isUserLoaded]);
 
   // Back button / Left-swipe event listener for Android
   useEffect(() => {
@@ -80,24 +86,19 @@ export default function App() {
   const primaryColor = '#1944F1';
   const inactiveColor = '#94A3B8';
 
-  const handleLoginSuccess = (userData) => {
-    const name = userData.fullName || userData.username || userData.name;
-    setUser(prev => ({ ...prev, ...userData, name }));
-    saveAuthSession(userData.token, userData);
-    setCurrentScreen('main');
-  };
-
-  const handleSignupSuccess = (formData) => {
-    const name = formData.fullName || formData.username || formData.name;
-    setUser(prev => ({ ...prev, ...formData, name }));
-    saveAuthSession(formData.token, formData);
-    setCurrentScreen('main');
-  };
-
-  const handleLogout = () => {
-    logoutAuthSession();
+  const handleLogout = async () => {
+    await signOut();
     setCurrentScreen('welcome');
   };
+
+  // Build a user object for screens that display profile info
+  const userForScreens = user ? {
+    ...user,
+    name: user.fullName || user.username,
+    username: user.username,
+    email: user.emailAddresses?.[0]?.emailAddress,
+    avatar: user.imageUrl,
+  } : null;
 
   // Show bottom nav bar only for main tab screens
   const showBottomNav = currentScreen === 'main' && ['home', 'chats', 'sell', 'myads', 'profile'].includes(activeNav);
@@ -113,13 +114,11 @@ export default function App() {
         {currentScreen === 'login' && (
           <LoginScreen 
             onNavigate={(screen) => setCurrentScreen(screen)} 
-            onLoginSuccess={handleLoginSuccess}
           />
         )}
         {currentScreen === 'signup' && (
           <SignupScreen 
             onNavigate={(screen) => setCurrentScreen(screen)} 
-            onSignupSuccess={handleSignupSuccess}
           />
         )}
 
@@ -128,7 +127,7 @@ export default function App() {
             {activeNav === 'home' && (
               <HomeScreen 
                 key="home" 
-                user={user} 
+                user={userForScreens} 
                 activeNav={activeNav}
                 setActiveNav={setActiveNav}
                 favorites={favorites}
@@ -166,7 +165,7 @@ export default function App() {
             {activeNav === 'profile' && (
               <ProfileScreen 
                 key="profile"
-                user={user}
+                user={userForScreens}
                 activeNav={activeNav} 
                 setActiveNav={setActiveNav} 
                 favorites={favorites}
@@ -177,7 +176,7 @@ export default function App() {
             {activeNav === 'wishlist' && (
               <WishlistScreen 
                 key="wishlist"
-                user={user}
+                user={userForScreens}
                 activeNav={activeNav}
                 setActiveNav={setActiveNav}
                 favorites={favorites}
@@ -188,7 +187,7 @@ export default function App() {
             {activeNav === 'notifications' && (
               <NotificationsScreen
                 key="notifications"
-                user={user}
+                user={userForScreens}
                 activeNav={activeNav}
                 setActiveNav={setActiveNav}
                 favorites={favorites}
