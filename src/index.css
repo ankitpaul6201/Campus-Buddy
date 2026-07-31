@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .bg-brand-blue {
+    background-color: #1944F1;
+  }
+
+  .text-brand-blue {
+    color: #1944F1;
+  }
+}
+
+/* Custom smooth styling */
+body {
+  font-family: 'Outfit', 'Inter', sans-serif;
+  background-color: #F3F4F6;
+  color: #0F172A;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F3F4F6;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}

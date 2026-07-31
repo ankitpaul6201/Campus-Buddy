@@ -1,0 +1,12 @@
+{
+  "appId": "com.campusbuddy.app",
+  "appName": "Campus Buddy",
+  "webDir": "dist",
+  "plugins": {
+    "StatusBar": {
+      "style": "LIGHT",
+      "backgroundColor": "#FFFFFF",
+      "overlaysWebView": false
+    }
+  }
+}
