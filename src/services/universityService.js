@@ -113,3 +113,37 @@ export async function searchUniversities(query) {
     return fallbackResults;
   }
 }
+
+// ─── Add Onboarding Support exports ────────────────────────────────────────
+
+export const COUNTRIES = [
+  { id: 'US', name: 'United States', flagEmoji: '🇺🇸', isoCode: 'USA' },
+  { id: 'IN', name: 'India', flagEmoji: '🇮🇳', isoCode: 'IND' },
+  { id: 'GB', name: 'United Kingdom', flagEmoji: '🇬🇧', isoCode: 'GBR' },
+  { id: 'CA', name: 'Canada', flagEmoji: '🇨🇦', isoCode: 'CAN' }
+];
+
+export const STATES = {
+  US: [
+    { id: 'CA', name: 'California' },
+    { id: 'NY', name: 'New York' },
+    { id: 'TX', name: 'Texas' }
+  ],
+  IN: [
+    { id: 'DL', name: 'Delhi' },
+    { id: 'MH', name: 'Maharashtra' },
+    { id: 'KA', name: 'Karnataka' }
+  ],
+  GB: [],
+  CA: []
+};
+
+export async function searchUniversitiesOnServer(query, country, state) {
+  // Reuse searchUniversities which queries the global hipolabs university registry
+  return searchUniversities(query);
+}
+
+export async function submitUniversityRequest(requestData) {
+  return { success: true };
+}
+

@@ -15,6 +15,7 @@ import MyAdsScreen from './components/MyAdsScreen';
 import ProfileScreen from './components/ProfileScreen';
 import WishlistScreen from './components/WishlistScreen';
 import NotificationsScreen from './components/NotificationsScreen';
+import UniversityOnboarding from './components/UniversityOnboarding';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('welcome');
@@ -169,8 +170,40 @@ export default function App() {
     syncProfile();
   }, [isSignedIn, isUserLoaded, user]);
 
-  // Show bottom nav bar only for main tab screens
-  const showBottomNav = currentScreen === 'main' && ['home', 'chats', 'sell', 'myads', 'profile'].includes(activeNav);
+  const handleSelectUniversityOnboarding = async (uniData) => {
+    try {
+      const token = await getToken();
+      const { API_BASE_URL } = await import('./lib/api');
+      
+      const res = await fetch(`${API_BASE_URL}/auth/me/university`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          universityName: uniData.universityName,
+          username: user.username
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.universityName) {
+          setDbUser(prev => prev ? { ...prev, universityName: data.universityName } : { universityName: data.universityName });
+        }
+      }
+
+      await user.reload();
+    } catch (err) {
+      console.error('Error saving onboarding university:', err);
+    }
+  };
+
+  // Show bottom nav bar only for main tab screens (hide during onboarding selection)
+  const showBottomNav = currentScreen === 'main' && 
+    userForScreens?.universityName !== 'Campus Member' && 
+    ['home', 'chats', 'sell', 'myads', 'profile'].includes(activeNav);
 
   return (
     <div className="w-full h-full min-h-screen bg-white text-slate-900 font-sans overflow-hidden select-none relative flex flex-col justify-between">
@@ -192,7 +225,12 @@ export default function App() {
         )}
 
         {currentScreen === 'main' && (
-          <AnimatePresence mode="wait">
+          userForScreens?.universityName === 'Campus Member' ? (
+            <UniversityOnboarding 
+              onSelectUniversity={handleSelectUniversityOnboarding} 
+            />
+          ) : (
+            <AnimatePresence mode="wait">
             {activeNav === 'home' && (
               <HomeScreen 
                 key="home" 
@@ -264,6 +302,7 @@ export default function App() {
               />
             )}
           </AnimatePresence>
+          )
         )}
       </div>
 
