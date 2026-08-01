@@ -27,6 +27,8 @@ export default function App() {
   // Clerk auth state
   const { user, isLoaded: isUserLoaded } = useUser();
   const { isSignedIn, signOut } = useAuth();
+  const [notifications, setNotifications] = useState([]);
+  const [userAds, setUserAds] = useState([]);
   const [dbUser, setDbUser] = useState(null);
 
   useEffect(() => {
@@ -202,33 +204,43 @@ export default function App() {
                 setActiveNav={setActiveNav}
                 favorites={favorites}
                 setFavorites={setFavorites}
+                notifications={notifications}
+                userAds={userAds}
                 onNavigate={(screen) => setCurrentScreen(screen)} 
               />
             )}
             {activeNav === 'chats' && (
               <ChatScreen 
                 key="chats"
+                user={userForScreens}
                 activeNav={activeNav} 
                 setActiveNav={setActiveNav} 
                 favorites={favorites}
+                notifications={notifications}
                 onNavigateBack={() => setActiveNav('home')} 
               />
             )}
             {activeNav === 'sell' && (
               <SellScreen 
                 key="sell"
+                user={userForScreens}
                 activeNav={activeNav} 
                 setActiveNav={setActiveNav} 
                 favorites={favorites}
+                notifications={notifications}
                 onNavigateBack={() => setActiveNav('home')} 
               />
             )}
             {activeNav === 'myads' && (
               <MyAdsScreen 
                 key="myads"
+                user={userForScreens}
                 activeNav={activeNav} 
                 setActiveNav={setActiveNav} 
                 favorites={favorites}
+                notifications={notifications}
+                userAds={userAds}
+                setUserAds={setUserAds}
                 onNavigateBack={() => setActiveNav('home')} 
               />
             )}
@@ -239,6 +251,8 @@ export default function App() {
                 activeNav={activeNav} 
                 setActiveNav={setActiveNav} 
                 favorites={favorites}
+                notifications={notifications}
+                userAds={userAds}
                 onNavigateBack={() => setActiveNav('home')} 
                 onLogout={handleLogout}
               />
@@ -251,6 +265,7 @@ export default function App() {
                 setActiveNav={setActiveNav}
                 favorites={favorites}
                 setFavorites={setFavorites}
+                notifications={notifications}
                 onNavigateBack={() => setActiveNav('home')}
               />
             )}
@@ -261,6 +276,8 @@ export default function App() {
                 activeNav={activeNav}
                 setActiveNav={setActiveNav}
                 favorites={favorites}
+                notifications={notifications}
+                setNotifications={setNotifications}
                 onNavigateBack={() => setActiveNav('home')}
               />
             )}

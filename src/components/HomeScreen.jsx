@@ -19,7 +19,7 @@ import WishlistScreen from './WishlistScreen';
 import NotificationsScreen from './NotificationsScreen';
 import { fetchProducts } from '../lib/api';
 
-export default function HomeScreen({ user, activeNav, setActiveNav, favorites, setFavorites, onNavigate }) {
+export default function HomeScreen({ user, activeNav, setActiveNav, favorites, setFavorites, notifications = [], userAds = [], onNavigate }) {
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [dbProducts, setDbProducts] = useState([]);
@@ -174,7 +174,11 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
             title="Notifications"
           >
             <img src="/bell-svgrepo-com.svg" alt="Notifications" className="w-[22px] h-[22px] object-contain filter brightness-0 opacity-90" />
-            <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />
+            {notifications.filter(n => n.unread).length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] min-h-[18px] max-w-[18px] max-h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs">
+                {notifications.filter(n => n.unread).length}
+              </span>
+            )}
           </button>
         </div>
       </div>

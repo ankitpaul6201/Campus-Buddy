@@ -27,8 +27,7 @@ import {
   Sparkles
 } from 'lucide-react';
 
-export default function ProfileScreen({ user, activeNav, setActiveNav, onNavigateBack, onLogout }) {
-  const [favorites, setFavorites] = useState(['card-2']);
+export default function ProfileScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], onNavigateBack, onLogout }) {
   const [showWishlistModal, setShowWishlistModal] = useState(false);
   const [activeModal, setActiveModal] = useState(null); // 'purchases', 'verification', 'security', 'support', 'terms', 'privacy', 'reviews'
   const [faqOpen, setFaqOpen] = useState(0);
@@ -175,7 +174,11 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, onNavigat
               title="Notifications"
             >
               <img src="/bell-svgrepo-com.svg" alt="Notifications" className="w-[22px] h-[22px] object-contain filter brightness-0 invert opacity-90" />
-              <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-rose-400 ring-2 ring-[#1944F1]" />
+              {notifications.filter(n => n.unread).length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] min-h-[18px] max-w-[18px] max-h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs">
+                  {notifications.filter(n => n.unread).length}
+                </span>
+              )}
             </button>
           </div>
 
@@ -213,9 +216,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, onNavigat
               <CheckCircle2 className="w-4 h-4 fill-[#1944F1] text-white" />
             </div>
           </div>
-        </div>
-
-        {/* 3 Metric Cards Row (Clickable) */}
+        </div>        {/* 3 Metric Cards Row (Clickable) */}
         <div className="px-5 mb-5">
           <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex items-center justify-around text-center">
             
@@ -223,7 +224,9 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, onNavigat
               onClick={() => setActiveModal('purchases')}
               className="flex-1 space-y-0.5 hover:bg-slate-50 p-2 rounded-2xl transition-colors text-center"
             >
-              <div className="text-lg font-bold text-slate-900 font-sans">12</div>
+              <div className="text-lg font-bold text-slate-900 font-sans">
+                {userAds ? userAds.filter(a => a.status === 'sold').length : 0}
+              </div>
               <div className="text-[11px] font-medium text-slate-400">Items Sold</div>
             </button>
 
@@ -233,7 +236,9 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, onNavigat
               onClick={() => setActiveNav && setActiveNav('myads')}
               className="flex-1 space-y-0.5 hover:bg-slate-50 p-2 rounded-2xl transition-colors text-center"
             >
-              <div className="text-lg font-bold text-slate-900 font-sans">3</div>
+              <div className="text-lg font-bold text-slate-900 font-sans">
+                {userAds ? userAds.filter(a => a.status !== 'sold').length : 0}
+              </div>
               <div className="text-[11px] font-medium text-slate-400">Active Ads</div>
             </button>
 
@@ -244,11 +249,10 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, onNavigat
               className="flex-1 space-y-0.5 hover:bg-slate-50 p-2 rounded-2xl transition-colors text-center"
             >
               <div className="text-lg font-bold text-slate-900 font-sans flex items-center justify-center gap-1">
-                4.9 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 inline" />
+                0.0 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 inline" />
               </div>
-              <div className="text-[11px] font-medium text-slate-400">58 Reviews</div>
+              <div className="text-[11px] font-medium text-slate-400">0 Reviews</div>
             </button>
-
           </div>
         </div>
 

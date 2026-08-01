@@ -9,51 +9,12 @@ import {
   CheckCheck
 } from 'lucide-react';
 
-export default function ChatScreen({ activeNav, setActiveNav, onNavigateBack }) {
+export default function ChatScreen({ user, activeNav, setActiveNav, notifications, onNavigateBack }) {
   const [selectedChatId, setSelectedChatId] = useState(null);
-  const [favorites, setFavorites] = useState(['card-2']);
-  const [messages, setMessages] = useState([
-    { id: 1, text: "Hey! Is the TI-84 Calculator still available?", sender: "me", time: "10:14 AM", read: true },
-    { id: 2, text: "Yes it is! Perfect working condition with charging cable.", sender: "them", time: "10:15 AM", read: true },
-    { id: 3, text: "Great! Can you drop it off at the Library today?", sender: "me", time: "10:16 AM", read: true },
-    { id: 4, text: "Sure, I can come around 4 PM near the main desk.", sender: "them", time: "10:18 AM", read: true },
-    { id: 5, text: "Thanks again for dropping it off!", sender: "them", time: "10:20 AM", read: false }
-  ]);
+  const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-
-  const chatsList = [
-    {
-      id: 'chat-1',
-      name: 'James Doe',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-      productTitle: 'Desk Lamp - LED',
-      lastMessage: 'Thanks again for dropping it off!',
-      time: 'Mon',
-      unreadCount: 1,
-      verified: true
-    },
-    {
-      id: 'chat-2',
-      name: 'Sarah Jenkins',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80',
-      productTitle: 'TI-84 Plus Calculator',
-      lastMessage: 'Sure, I can come around 4 PM near the main desk.',
-      time: '10:18 AM',
-      unreadCount: 0,
-      verified: true
-    },
-    {
-      id: 'chat-3',
-      name: 'Rahul Kumar',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-      productTitle: 'Engineering Math Vol 2',
-      lastMessage: 'Is the price negotiable?',
-      time: 'Yesterday',
-      unreadCount: 0,
-      verified: false
-    }
-  ];
+  const [chatsList, setChatsList] = useState([]);
 
   const uploadedHeartPath = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z";
   const activeChat = chatsList.find(c => c.id === selectedChatId) || chatsList[0];
@@ -282,7 +243,16 @@ export default function ChatScreen({ activeNav, setActiveNav, onNavigateBack }) 
 
               {/* Inbox Cards */}
               <div className="space-y-2.5 pt-1">
-                {filteredChats.map((chat) => (
+                {filteredChats.length === 0 ? (
+                  <div className="py-16 text-center space-y-2 bg-white rounded-3xl p-6 border border-slate-100 shadow-2xs">
+                    <MessageSquare className="w-10 h-10 text-slate-300 mx-auto" />
+                    <h3 className="text-sm font-bold text-slate-800">No Messages Yet</h3>
+                    <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                      When you inquire about an item or buyers message you about your listings, your chats will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  filteredChats.map((chat) => (
                   <div
                     key={chat.id}
                     onClick={() => setSelectedChatId(chat.id)}
@@ -331,7 +301,8 @@ export default function ChatScreen({ activeNav, setActiveNav, onNavigateBack }) 
                       )}
                     </div>
                   </div>
-                ))}
+                ))
+                )}
               </div>
             </div>
           )}

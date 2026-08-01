@@ -18,71 +18,11 @@ export default function NotificationsScreen({
   user, 
   activeNav, 
   setActiveNav, 
+  notifications = [],
+  setNotifications,
   onNavigateBack 
 }) {
   const [activeFilter, setActiveFilter] = useState('all');
-  const [notifications, setNotifications] = useState([
-    {
-      id: 'notif-1',
-      type: 'price_drop',
-      title: 'Price Drop Alert! 📉',
-      message: 'TI-84 Plus CE Graphing Calculator dropped from $90 to $80 in your saved wishlist.',
-      time: '10m ago',
-      unread: true,
-      category: 'Marketplace',
-      icon: TrendingDown,
-      iconBg: 'bg-emerald-100 text-emerald-600',
-      actionTab: 'wishlist'
-    },
-    {
-      id: 'notif-[#1944F1]',
-      type: 'message',
-      title: 'New Message from Sarah 💬',
-      message: '"Is the Engineering Math book still available for drop-off at library?"',
-      time: '45m ago',
-      unread: true,
-      category: 'Chats',
-      icon: MessageSquare,
-      iconBg: 'bg-blue-100 text-[#1944F1]',
-      actionTab: 'chats'
-    },
-    {
-      id: 'notif-3',
-      type: 'verification',
-      title: 'Student ID Verified! 🛡️',
-      message: 'Your Stanford University student credential has been verified. You now have a verified badge.',
-      time: '3h ago',
-      unread: false,
-      category: 'System',
-      icon: ShieldCheck,
-      iconBg: 'bg-indigo-100 text-indigo-600',
-      actionTab: 'profile'
-    },
-    {
-      id: 'notif-4',
-      type: 'listing',
-      title: 'Ad Views Surge 🚀',
-      message: 'Your listing "Study Desk Lamp (LED)" got 38 new student views today.',
-      time: 'Yesterday',
-      unread: false,
-      category: 'Marketplace',
-      icon: Tag,
-      iconBg: 'bg-purple-100 text-purple-600',
-      actionTab: 'myads'
-    },
-    {
-      id: 'notif-5',
-      type: 'system',
-      title: 'Welcome to Campus Buddy 👋',
-      message: 'Explore books, electronics, and dorm items listed by students on your campus.',
-      time: '2d ago',
-      unread: false,
-      category: 'System',
-      icon: Info,
-      iconBg: 'bg-amber-100 text-amber-600',
-      actionTab: 'home'
-    }
-  ]);
 
   const primaryColor = '#1944F1';
   const inactiveColor = '#94A3B8';

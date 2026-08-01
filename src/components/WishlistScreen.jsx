@@ -16,8 +16,9 @@ export default function WishlistScreen({
   activeNav, 
   setActiveNav, 
   onNavigateBack, 
-  favorites = ['card-1', 'card-2'], 
+  favorites = [], 
   setFavorites,
+  notifications = [],
   productsList
 }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -129,7 +130,11 @@ export default function WishlistScreen({
               title="Notifications"
             >
               <img src="/bell-svgrepo-com.svg" alt="Notifications" className="w-[22px] h-[22px] object-contain filter brightness-0 opacity-90" />
-              <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />
+              {notifications.filter(n => n.unread).length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] min-h-[18px] max-w-[18px] max-h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs">
+                  {notifications.filter(n => n.unread).length}
+                </span>
+              )}
             </button>
           </div>
         </div>

@@ -12,44 +12,16 @@ import {
   Bell
 } from 'lucide-react';
 
-export default function MyAdsScreen({ activeNav, setActiveNav, onNavigateBack }) {
+export default function MyAdsScreen({ user, activeNav, setActiveNav, userAds = [], setUserAds, onNavigateBack }) {
   const [activeFilter, setActiveFilter] = useState('active');
-  const [favorites, setFavorites] = useState(['card-2']);
-  const [adsList, setAdsList] = useState([
-    {
-      id: 'ad-1',
-      title: 'MacBook Pro 14" M1',
-      price: '$850',
-      views: 142,
-      activeChats: 3,
-      saves: 12,
-      image: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=600&q=80',
-      status: 'active'
-    },
-    {
-      id: 'ad-2',
-      title: 'Calculus Early Transcendentals',
-      price: '$45',
-      views: 56,
-      activeChats: 1,
-      saves: 4,
-      image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-      status: 'active'
-    },
-    {
-      id: 'ad-3',
-      title: 'Mini Fridge (Like New)',
-      price: '$60',
-      views: 89,
-      activeChats: 0,
-      saves: 8,
-      image: 'https://images.unsplash.com/photo-1584992236310-6edddc08acff?auto=format&fit=crop&w=600&q=80',
-      status: 'active'
-    }
-  ]);
+  const [adsList, setAdsList] = useState(userAds);
 
   const handleMarkAsSold = (id) => {
-    setAdsList(prev => prev.map(ad => ad.id === id ? { ...ad, status: ad.status === 'sold' ? 'active' : 'sold' } : ad));
+    setAdsList(prev => {
+      const updated = prev.map(ad => ad.id === id || ad._id === id ? { ...ad, status: ad.status === 'sold' ? 'active' : 'sold' } : ad);
+      if (setUserAds) setUserAds(updated);
+      return updated;
+    });
   };
 
   const activeAds = adsList.filter(ad => ad.status === 'active');
