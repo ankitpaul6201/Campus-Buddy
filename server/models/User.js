@@ -1,20 +1,11 @@
 const mongoose = require('mongoose');
 
-// User model is now a campus profile — auth identity is managed by Clerk.
-// clerkId links this document to the Clerk user.
+// User model for Traditional JWT Auth + Campus Profile directly in MongoDB Atlas
 const userSchema = new mongoose.Schema({
-  clerkId: {
+  fullName: {
     type: String,
     required: true,
-    unique: true,
-    index: true
-  },
-  username: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    lowercase: true
+    trim: true
   },
   email: {
     type: String,
@@ -23,7 +14,7 @@ const userSchema = new mongoose.Schema({
     trim: true,
     lowercase: true
   },
-  fullName: {
+  password: {
     type: String,
     required: true
   },
@@ -32,6 +23,18 @@ const userSchema = new mongoose.Schema({
     default: 'Campus Member'
   },
   avatar: {
+    type: String,
+    default: '/avatar.svg'
+  },
+  studentIdUrl: {
+    type: String,
+    default: ''
+  },
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
+  clerkId: {
     type: String,
     default: ''
   }

@@ -124,28 +124,23 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
       className="w-full h-full min-h-screen bg-white text-slate-900 flex flex-col justify-between overflow-hidden select-none font-sans relative"
     >
       {/* 1. TOP HEADER BAR - BROUGHT DOWN CLEANLY WITH TOP SAFE PADDING */}
-      <div className="pt-12 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
+      <div className="pt-14 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 min-w-[44px] max-w-[44px] min-h-[44px] max-h-[44px] aspect-square rounded-full overflow-hidden shrink-0 border border-slate-200 shadow-2xs flex items-center justify-center bg-[#1944F1] text-white font-bold text-lg select-none">
-            {user?.hasImage && user?.avatar ? (
-              <img 
-                src={user.avatar} 
-                alt="Profile" 
-                className="w-full h-full object-cover shrink-0"
-              />
-            ) : (
-              <span className="uppercase leading-none">
-                {(user?.fullName || user?.name || user?.username || 'S').charAt(0)}
-              </span>
-            )}
+          <div className="w-11 h-11 min-w-[44px] max-w-[44px] min-h-[44px] max-h-[44px] aspect-square rounded-full overflow-hidden shrink-0 border border-slate-200 shadow-2xs flex items-center justify-center bg-slate-100 select-none">
+            <img 
+              src={user?.avatar || '/avatar-blue-2.svg'} 
+              alt="Profile" 
+              className="w-full h-full object-cover shrink-0"
+              onError={(e) => { e.currentTarget.src = '/avatar-blue-2.svg'; }}
+            />
           </div>
           <div className="text-left">
             <h2 className="text-sm sm:text-base font-bold text-slate-900 font-sans leading-tight">
-              {user?.fullName || user?.name || user?.username || 'Student'}
+              Hi, {user?.fullName || user?.name || 'Student'}
             </h2>
             <p className="text-xs text-slate-500 font-medium leading-tight mt-0.5 flex items-center gap-1">
               <School className="w-3.5 h-3.5 text-[#1944F1] inline shrink-0" />
-              <span>{user?.universityName || user?.university?.name || user?.campusName || 'Stanford University'}</span>
+              <span>{user?.universityName || user?.university?.name || user?.campusName || 'Campus Member'}</span>
             </p>
           </div>
         </div>
@@ -288,7 +283,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
               const isFav = favorites.includes(item._id || item.id);
               const priceText = typeof item.price === 'number' ? `$${item.price}` : item.price;
               const imageUrl = item.images && item.images.length > 0 ? item.images[0] : (item.image || 'https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=600&q=80');
-              const sellerName = item.seller?.fullName || item.seller?.username || item.sellerName || 'Student';
+              const sellerName = item.seller?.fullName || item.sellerName || 'Student';
               const sellerAvatar = sellerName.charAt(0).toUpperCase();
 
               return (

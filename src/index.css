@@ -17,6 +17,19 @@ body {
   font-family: 'Outfit', 'Inter', sans-serif;
   background-color: #F3F4F6;
   color: #0F172A;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Prevent native selection callouts and handles on interactive elements */
+* {
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+input, textarea {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: text !important;
+  user-select: text !important;
 }
 
 ::-webkit-scrollbar {
@@ -28,4 +41,15 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #CBD5E1;
   border-radius: 9999px;
+}
+
+/* Fix browser keyboard autofill white background overlay */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset !important;
+  box-shadow: 0 0 0 1000px #FFFFFF inset !important;
+  -webkit-text-fill-color: #0F172A !important;
+  transition: background-color 5000s ease-in-out 0s !important;
 }

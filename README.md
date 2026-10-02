@@ -53,15 +53,21 @@ Campus Buddy/
 │   │   └── MyAdsScreen.jsx      # Your active listings
 │   ├── lib/
 │   │   └── api.js              # API client (auto-selects local/production URL)
+│   │   └── services/           # University & verification services
 │   └── App.jsx                 # Root with navigation + auth state
 ├── server/                     # Node.js + Express backend
-│   ├── middleware/auth.js       # JWT verification
-│   ├── models/                 # Mongoose schemas (User, Product)
-│   ├── routes/                 # API route handlers (auth, products)
+│   ├── middleware/auth.js       # JWT & session verification
+│   ├── models/                 # Mongoose schemas (User, Product, College, University)
+│   ├── routes/                 # API route handlers (auth, products, universities)
+│   ├── scripts/                # Database seed & parse scripts (colleges import)
 │   ├── server.js               # Express app entry point
 │   ├── railway.json            # Railway deployment config
 │   └── README.md               # Backend-specific docs
-├── public/                     # Static assets
+├── website/                    # Modern marketing landing page & web app
+│   ├── src/                    # Landing page React/TypeScript components
+│   ├── public/                 # Landing page assets & fonts
+│   └── package.json            # Website dependencies & scripts
+├── public/                     # Mobile app static assets & vector icons
 ├── .env.example                # Frontend environment variable template
 ├── capacitor.config.json       # Capacitor Android config
 ├── tailwind.config.js

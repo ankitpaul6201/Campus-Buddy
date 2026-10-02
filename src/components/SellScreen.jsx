@@ -77,7 +77,7 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
       <div className="flex-1 overflow-y-auto pb-28 space-y-5 bg-white">
         
         {/* 1. Header Bar: Left Logo + Black Title - BROUGHT DOWN CLEANLY WITH TOP SAFE PADDING */}
-        <div className="pt-12 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-30">
+        <div className="pt-14 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-30">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg shrink-0 overflow-hidden">
               <img 

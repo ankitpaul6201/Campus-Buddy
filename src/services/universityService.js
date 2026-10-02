@@ -1,44 +1,44 @@
 /**
- * UniversityService — Dedicated API Client Service for Campus Buddy
+ * UniversityService — Unified Indian Colleges & Universities Directory Service
  *
- * Exposes a clean method `searchUniversities(query)` which communicates ONLY
- * with our internal backend endpoint `GET /universities/search?q=<query>`.
- * 
- * Includes session caching, 300ms debouncing, and request cancellation.
+ * Integrates directly with MongoDB Atlas database:
+ * - 54,244 Colleges (from AISHE directory)
+ * - 1,362 Universities & Institutes of National Importance
+ *
+ * Search behavior:
+ * - On initial load, does NOT show any colleges (empty list).
+ * - As the user types (>= 2 characters), debounced queries search both
+ *   colleges and universities from MongoDB Atlas and display them.
  */
 
-// In-memory session cache for fast lookup and zero duplicate requests
-const sessionCache = new Map();
+import { API_BASE_URL } from '../lib/api';
+
+const searchCache = new Map();
 let currentAbortController = null;
 
 /**
- * Backend API Client Call: GET /universities/search?q=<query>
- *
- * Returns standardized schema:
- * [
- *   {
- *     "id": "stanford-university",
- *     "name": "Stanford University",
- *     "city": "Stanford",
- *     "country": "United States",
- *     "website": "https://www.stanford.edu"
- *   }
- * ]
+ * Searches colleges and universities from MongoDB Atlas
+ * @param {string} query - search text
+ * @returns {Promise<Array>} List of matching colleges and universities
  */
 export async function searchUniversities(query) {
-  const q = query ? query.trim().toLowerCase() : '';
+  // Pre-check browser offline status
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new Error('NETWORK_OFFLINE');
+  }
 
-  // Performance rule: Do not send request for empty input or less than 2 characters
+  const q = (query || '').trim();
+
+  // Per user requirement: Do not show any college until user starts searching
   if (!q || q.length < 2) {
     return [];
   }
 
-  // Session Cache check
-  if (sessionCache.has(q)) {
-    return sessionCache.get(q);
+  const lowerQ = q.toLowerCase();
+  if (searchCache.has(lowerQ)) {
+    return searchCache.get(lowerQ);
   }
 
-  // Cancel previous pending search request if user keeps typing
   if (currentAbortController) {
     currentAbortController.abort();
   }
@@ -46,104 +46,93 @@ export async function searchUniversities(query) {
   const signal = currentAbortController.signal;
 
   try {
-    // 1. Simulate internal backend API call: GET /universities/search?q=<query>
-    // Primary query uses internal endpoint with fallback to global university registry API
-    const response = await fetch(`https://universities.hipolabs.com/search?name=${encodeURIComponent(q)}`, {
-      method: 'GET',
-      signal
+    const res = await fetch(`${API_BASE_URL}/universities?q=${encodeURIComponent(q)}&limit=60`, {
+      signal,
+      headers: { 'Accept': 'application/json' }
     });
 
-    if (!response.ok) {
-      throw new Error(`Backend response error: ${response.status}`);
+    if (!res.ok) {
+      throw new Error('NETWORK_OFFLINE');
     }
 
-    const rawData = await response.json();
+    const data = await res.json();
+    const results = (data.universities || []).map(u => ({
+      id: u.id || u._id,
+      _id: u._id || u.id,
+      name: u.name,
+      type: u.type || 'College',
+      universityName: u.universityName || '',
+      city: u.city || '',
+      state: u.state || '',
+      country: u.country || 'India',
+      website: u.website || '',
+      aisheCode: u.aisheCode || '',
+      verified: u.verified !== false
+    }));
 
-    // Standardize backend response contract according to specifications:
-    const results = rawData.slice(0, 12).map((item) => {
-      const cleanName = item.name.trim();
-      const slugId = cleanName
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-
-      return {
-        id: slugId,
-        name: cleanName,
-        city: item['state-province'] || item.country || 'Main Campus',
-        country: item.country || 'Global',
-        website: item.web_pages && item.web_pages.length > 0 ? item.web_pages[0] : ''
-      };
-    });
-
-    // Cache results for session
-    sessionCache.set(q, results);
+    searchCache.set(lowerQ, results);
     return results;
-
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      // Intentionally canceled because user kept typing
+  } catch (err) {
+    if (err.name === 'AbortError') {
       return [];
     }
-
-    console.warn('Backend query error, utilizing seed fallback:', error);
-
-    // Fallback static seed list if network is offline
-    const seedUniversities = [
-      { id: 'stanford-university', name: 'Stanford University', city: 'Stanford', country: 'United States', website: 'https://www.stanford.edu' },
-      { id: 'massachusetts-institute-of-technology', name: 'Massachusetts Institute of Technology', city: 'Cambridge', country: 'United States', website: 'https://mit.edu' },
-      { id: 'harvard-university', name: 'Harvard University', city: 'Cambridge', country: 'United States', website: 'https://harvard.edu' },
-      { id: 'university-of-california-berkeley', name: 'University of California, Berkeley', city: 'Berkeley', country: 'United States', website: 'https://berkeley.edu' },
-      { id: 'indian-institute-of-technology-delhi', name: 'Indian Institute of Technology Delhi', city: 'New Delhi', country: 'India', website: 'https://iitd.ac.in' },
-      { id: 'indian-institute-of-technology-bombay', name: 'Indian Institute of Technology Bombay', city: 'Mumbai', country: 'India', website: 'https://iitb.ac.in' },
-      { id: 'delhi-university', name: 'University of Delhi', city: 'New Delhi', country: 'India', website: 'https://du.ac.in' },
-      { id: 'bits-pilani', name: 'BITS Pilani', city: 'Pilani', country: 'India', website: 'https://bits-pilani.ac.in' },
-      { id: 'university-of-oxford', name: 'University of Oxford', city: 'Oxford', country: 'United Kingdom', website: 'https://ox.ac.uk' },
-      { id: 'university-of-toronto', name: 'University of Toronto', city: 'Toronto', country: 'Canada', website: 'https://utoronto.ca' }
-    ];
-
-    const fallbackResults = seedUniversities.filter(u => 
-      u.name.toLowerCase().includes(q) || 
-      u.city.toLowerCase().includes(q) || 
-      u.country.toLowerCase().includes(q)
-    );
-
-    sessionCache.set(q, fallbackResults);
-    return fallbackResults;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('NETWORK_OFFLINE');
+    }
+    throw err;
   }
 }
 
-// ─── Add Onboarding Support exports ────────────────────────────────────────
-
-export const COUNTRIES = [
-  { id: 'US', name: 'United States', flagEmoji: '🇺🇸', isoCode: 'USA' },
-  { id: 'IN', name: 'India', flagEmoji: '🇮🇳', isoCode: 'IND' },
-  { id: 'GB', name: 'United Kingdom', flagEmoji: '🇬🇧', isoCode: 'GBR' },
-  { id: 'CA', name: 'Canada', flagEmoji: '🇨🇦', isoCode: 'CAN' }
-];
-
-export const STATES = {
-  US: [
-    { id: 'CA', name: 'California' },
-    { id: 'NY', name: 'New York' },
-    { id: 'TX', name: 'Texas' }
-  ],
-  IN: [
-    { id: 'DL', name: 'Delhi' },
-    { id: 'MH', name: 'Maharashtra' },
-    { id: 'KA', name: 'Karnataka' }
-  ],
-  GB: [],
-  CA: []
-};
-
+/**
+ * Alias for server-based search
+ */
 export async function searchUniversitiesOnServer(query, country, state) {
-  // Reuse searchUniversities which queries the global hipolabs university registry
   return searchUniversities(query);
 }
 
-export async function submitUniversityRequest(requestData) {
+/**
+ * Mock request submission for university onboarding modal
+ */
+export async function submitUniversityRequest() {
   return { success: true };
 }
 
+// ─── India Specific Constants ─────────────────────────────────────────────
+
+export const COUNTRIES = [
+  { id: 'IN', name: 'India', flagEmoji: '🇮🇳', isoCode: 'IND' }
+];
+
+export const STATES = {
+  IN: [
+    { id: 'AP', name: 'Andhra Pradesh' },
+    { id: 'AR', name: 'Arunachal Pradesh' },
+    { id: 'AS', name: 'Assam' },
+    { id: 'BR', name: 'Bihar' },
+    { id: 'CG', name: 'Chhattisgarh' },
+    { id: 'DL', name: 'Delhi' },
+    { id: 'GA', name: 'Goa' },
+    { id: 'GJ', name: 'Gujarat' },
+    { id: 'HR', name: 'Haryana' },
+    { id: 'HP', name: 'Himachal Pradesh' },
+    { id: 'JH', name: 'Jharkhand' },
+    { id: 'KA', name: 'Karnataka' },
+    { id: 'KL', name: 'Kerala' },
+    { id: 'MP', name: 'Madhya Pradesh' },
+    { id: 'MH', name: 'Maharashtra' },
+    { id: 'MN', name: 'Manipur' },
+    { id: 'ML', name: 'Meghalaya' },
+    { id: 'MZ', name: 'Mizoram' },
+    { id: 'NL', name: 'Nagaland' },
+    { id: 'OD', name: 'Odisha' },
+    { id: 'PB', name: 'Punjab' },
+    { id: 'RJ', name: 'Rajasthan' },
+    { id: 'SK', name: 'Sikkim' },
+    { id: 'TN', name: 'Tamil Nadu' },
+    { id: 'TS', name: 'Telangana' },
+    { id: 'TR', name: 'Tripura' },
+    { id: 'UP', name: 'Uttar Pradesh' },
+    { id: 'UK', name: 'Uttarakhand' },
+    { id: 'WB', name: 'West Bengal' }
+  ]
+};

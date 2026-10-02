@@ -47,7 +47,7 @@ router.post('/upload-image', authMiddleware, upload.single('image'), async (req,
 router.get('/', async (req, res) => {
   try {
     const products = await Product.find({ status: 'active' })
-      .populate('seller', 'fullName username avatar universityName')
+      .populate('seller', 'fullName avatar universityName')
       .sort({ createdAt: -1 });
 
     res.json(products);
@@ -69,7 +69,7 @@ router.post('/', authMiddleware, async (req, res) => {
       category,
       condition,
       images,
-      seller: req.auth.userId
+      seller: (req.user && req.user.id) || (req.auth && req.auth.userId)
     });
 
     await product.save();

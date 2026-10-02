@@ -6,10 +6,11 @@ import {
   Search, 
   Send,
   ShieldCheck,
-  CheckCheck
+  CheckCheck,
+  MessageSquare
 } from 'lucide-react';
 
-export default function ChatScreen({ user, activeNav, setActiveNav, notifications, onNavigateBack }) {
+export default function ChatScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], onNavigateBack }) {
   const [selectedChatId, setSelectedChatId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
@@ -17,7 +18,7 @@ export default function ChatScreen({ user, activeNav, setActiveNav, notification
   const [chatsList, setChatsList] = useState([]);
 
   const uploadedHeartPath = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z";
-  const activeChat = chatsList.find(c => c.id === selectedChatId) || chatsList[0];
+  const activeChat = chatsList.find(c => c.id === selectedChatId) || chatsList[0] || {};
 
   const handleSendMessage = (textToSend = inputText) => {
     if (!textToSend.trim()) return;
@@ -58,7 +59,7 @@ export default function ChatScreen({ user, activeNav, setActiveNav, notification
       <div className="flex-1 flex flex-col overflow-hidden pb-16">
         
         {/* COMPACT TOP HEADER BAR - BROUGHT DOWN CLEANLY WITH TOP SAFE PADDING */}
-        <div className="pt-12 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
+        <div className="pt-14 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
           {selectedChatId ? (
             /* Active Thread Header */
             <div className="flex items-center justify-between w-full">
@@ -72,19 +73,19 @@ export default function ChatScreen({ user, activeNav, setActiveNav, notification
 
                 <div className="flex items-center gap-2">
                   <img 
-                    src={activeChat.avatar} 
-                    alt={activeChat.name}
+                    src={activeChat?.avatar || ''} 
+                    alt={activeChat?.name || 'User'}
                     className="w-8 h-8 rounded-full object-cover border border-slate-200" 
                   />
                   <div>
                     <h3 className="text-xs font-bold text-slate-900 leading-tight flex items-center gap-1">
-                      {activeChat.name}
-                      {activeChat.verified && (
+                      {activeChat?.name || 'User'}
+                      {activeChat?.verified && (
                         <ShieldCheck className="w-3 h-3 text-[#1944F1]" />
                       )}
                     </h3>
                     <p className="text-[10px] text-[#1944F1] font-semibold leading-tight">
-                      {activeChat.productTitle}
+                      {activeChat?.productTitle || ''}
                     </p>
                   </div>
                 </div>
@@ -133,7 +134,11 @@ export default function ChatScreen({ user, activeNav, setActiveNav, notification
                   className="w-10 h-10 min-w-[40px] max-w-[40px] min-h-[40px] max-h-[40px] rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-900 relative shrink-0"
                 >
                   <img src="/bell-svgrepo-com.svg" alt="Bell" className="w-5 h-5 filter brightness-0 opacity-80" />
-                  <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />
+                  {notifications.filter(n => n.unread).length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] min-h-[18px] max-w-[18px] max-h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs">
+                      {notifications.filter(n => n.unread).length}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>

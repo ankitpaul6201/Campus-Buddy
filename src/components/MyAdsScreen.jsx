@@ -12,7 +12,7 @@ import {
   Bell
 } from 'lucide-react';
 
-export default function MyAdsScreen({ user, activeNav, setActiveNav, userAds = [], setUserAds, onNavigateBack }) {
+export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], setUserAds, onNavigateBack }) {
   const [activeFilter, setActiveFilter] = useState('active');
   const [adsList, setAdsList] = useState(userAds);
 
@@ -44,7 +44,7 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, userAds = [
       <div className="flex-1 overflow-y-auto pb-20 space-y-3 bg-[#F4F6FB] no-scrollbar">
         
         {/* COMPACT TOP HEADER BAR - BROUGHT DOWN CLEANLY WITH TOP SAFE PADDING */}
-        <div className="pt-12 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
+        <div className="pt-14 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
           <div className="flex items-center gap-3">
             <img 
               src="/campus-buddy-CB-exact-vector (1).svg" 
@@ -79,7 +79,11 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, userAds = [
               title="Notifications"
             >
               <img src="/bell-svgrepo-com.svg" alt="Notifications" className="w-[22px] h-[22px] object-contain filter brightness-0 opacity-90" />
-              <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />
+              {notifications.filter(n => n.unread).length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] min-h-[18px] max-w-[18px] max-h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs">
+                  {notifications.filter(n => n.unread).length}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -87,24 +91,14 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, userAds = [
         {/* Page Content Padding Wrapper */}
         <div className="px-4 space-y-3 pt-1">
           
-          {/* Page Title & Post New Item Button */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 font-sans tracking-tight">
-                My Ads
-              </h1>
-              <p className="text-xs text-slate-500 font-normal mt-0.5 leading-snug">
-                Manage your campus listings and active offers.
-              </p>
-            </div>
-
-            <button
-              onClick={() => setActiveNav && setActiveNav('sell')}
-              className="px-3 py-1.5 rounded-full bg-[#1944F1] hover:bg-blue-700 text-white text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center gap-1 shrink-0"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              New Ad
-            </button>
+          {/* Page Title */}
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 font-sans tracking-tight">
+              My Ads
+            </h1>
+            <p className="text-xs text-slate-500 font-normal mt-0.5 leading-snug">
+              Manage your campus listings and active offers.
+            </p>
           </div>
 
           {/* Status Filter Tabs */}

@@ -2,16 +2,26 @@
 # Environment & Secrets
 # ========================
 .env
-.env.local
-.env.production
-.env.*.local
+.env.*
+*.env
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.sample
 server/.env
+website/.env
+*.pem
+*.key
+*.cert
+*.pfx
+*.p12
 
 # ========================
 # Dependencies
 # ========================
 node_modules/
 server/node_modules/
+website/node_modules/
 
 # ========================
 # Build Output
@@ -19,6 +29,7 @@ server/node_modules/
 dist/
 build/
 .output/
+website/dist/
 
 # ========================
 # Capacitor / Android
@@ -49,7 +60,26 @@ Thumbs.db
 *.sw?
 
 # ========================
+# Scratch & Test Files
+# ========================
+test_id.png
+test_upload.js
+server/test_upload.cjs
+server/inspect_db.cjs
+website/scratch_parse.cjs
+website/next_f.txt
+website/page.html
+scratch/
+
+# ========================
+# External References & Staging
+# ========================
+BreathDearMedusae-main/
+google sans static/
+
+# ========================
 # Misc
 # ========================
 *.local
 pubspec.lock
+

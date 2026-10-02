@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
-import { useUser, useAuth } from '@clerk/clerk-react';
+import { apiGetMe, apiLogout, getStoredUser, getAuthToken } from './lib/api';
 import SplashScreen from './components/SplashScreen';
 import WelcomeScreen from './components/WelcomeScreen';
 import LoginScreen from './components/LoginScreen';
@@ -20,16 +20,16 @@ import UniversityOnboarding from './components/UniversityOnboarding';
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('welcome');
   const [activeNav, setActiveNav] = useState('home');
-  const [favorites, setFavorites] = useState(['card-2']);
+  const [favorites, setFavorites] = useState([]);
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef = useRef(0);
 
-  // Clerk auth state
-  const { user, isLoaded: isUserLoaded } = useUser();
-  const { isSignedIn, signOut } = useAuth();
+  // Traditional JWT Auth state (MongoDB Atlas)
+  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+  const [authLoading, setAuthLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [userAds, setUserAds] = useState([]);
-  const [dbUser, setDbUser] = useState(null);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -38,16 +38,50 @@ export default function App() {
     }
   }, []);
 
-  // Automatically switch screens based on Clerk session
+  // Quick splash display timer
   useEffect(() => {
-    if (!isUserLoaded) return; // wait for Clerk to initialise
-    if (isSignedIn) {
-      setCurrentScreen('main');
-    } else {
-      setCurrentScreen('welcome');
-      setDbUser(null);
-    }
-  }, [isSignedIn, isUserLoaded]);
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 600); // 600ms snappy entrance splash
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Restore session from MongoDB Atlas on mount
+  useEffect(() => {
+    let isMounted = true;
+    const initAuth = async () => {
+      const token = getAuthToken();
+      if (token) {
+        try {
+          const user = await apiGetMe();
+          if (isMounted) {
+            if (user) {
+              setCurrentUser(user);
+              setCurrentScreen('main');
+            } else {
+              setCurrentUser(null);
+              setCurrentScreen('welcome');
+            }
+          }
+        } catch {
+          if (isMounted) {
+            setCurrentUser(null);
+            setCurrentScreen('welcome');
+          }
+        }
+      } else {
+        if (isMounted) {
+          setCurrentUser(null);
+          setCurrentScreen('welcome');
+        }
+      }
+      if (isMounted) setAuthLoading(false);
+    };
+
+    initAuth();
+    return () => { isMounted = false; };
+  }, []);
 
   // Back button / Left-swipe event listener for Android
   useEffect(() => {
@@ -91,108 +125,120 @@ export default function App() {
   const primaryColor = '#1944F1';
   const inactiveColor = '#94A3B8';
 
-  const handleLogout = async () => {
-    await signOut();
+  const handleLogout = () => {
+    apiLogout();
+    setCurrentUser(null);
     setCurrentScreen('welcome');
   };
 
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    setCurrentScreen('main');
+  };
+
   // Build a user object for screens that display profile info
-  const userForScreens = user ? {
-    ...user,
-    name: user.fullName || user.username || 'Student',
-    fullName: user.fullName,
-    username: user.username,
-    email: user.emailAddresses?.[0]?.emailAddress,
-    avatar: user.imageUrl,
-    hasImage: user.hasImage,
-    universityName: dbUser?.universityName || user.publicMetadata?.universityName || 'Campus Member',
+  const customAvatar = localStorage.getItem('user_custom_avatar');
+  const customFullName = localStorage.getItem('user_custom_fullname');
+  const isVerifiedLocal = localStorage.getItem('user_id_verified') === 'true';
+
+  const userForScreens = currentUser ? {
+    ...currentUser,
+    name: customFullName || currentUser.fullName || currentUser.name || 'Student',
+    fullName: customFullName || currentUser.fullName || currentUser.name,
+    dob: currentUser.dob || localStorage.getItem('user_dob') || '',
+    course: currentUser.course || localStorage.getItem('user_course') || '',
+    year: currentUser.year || localStorage.getItem('user_year') || '1st Year',
+    email: currentUser.email,
+    avatar: customAvatar || currentUser.avatar || '/avatar-blue-2.svg',
+    hasImage: true,
+    universityName: currentUser.universityName || localStorage.getItem('pending_uni') || 'Campus Member',
+    isVerified: Boolean(currentUser.isVerified ?? isVerifiedLocal),
+    studentIdUrl: currentUser.studentIdUrl || localStorage.getItem('user_student_id_url') || '',
   } : null;
 
-  const { getToken } = useAuth();
-
-  // Sync user profile with backend on sign in / handle post-signup university save
-  useEffect(() => {
-    if (!isUserLoaded || !isSignedIn || !user) return;
-
-    const syncProfile = async () => {
-      const pendingUni = localStorage.getItem('pending_uni');
-      const pendingUsername = localStorage.getItem('pending_username');
-      const token = await getToken();
-
-      // If we have a pending university registration to save to the database
-      if (pendingUni) {
-        try {
-          const { API_BASE_URL } = await import('./lib/api');
-          
-          const res = await fetch(`${API_BASE_URL}/auth/me/university`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              universityName: pendingUni,
-              username: pendingUsername || user.username
-            })
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            if (data.universityName) {
-              setDbUser(prev => prev ? { ...prev, universityName: data.universityName } : { universityName: data.universityName });
-            }
-          }
-
-          // Clear the pending localStorage flags
-          localStorage.removeItem('pending_uni');
-          localStorage.removeItem('pending_username');
-
-          // Reload Clerk user so the publicMetadata is immediately updated on the client
-          await user.reload();
-        } catch (err) {
-          console.error('Error saving university details:', err);
-        }
-      } else {
-        // Just normal login profile sync (auto-creates local profile on first login)
-        try {
-          const { API_BASE_URL } = await import('./lib/api');
-          const syncRes = await fetch(`${API_BASE_URL}/auth/me`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (syncRes.ok) {
-            const data = await syncRes.json();
-            setDbUser(data);
-          }
-        } catch (err) {
-          console.error('Error syncing backend profile:', err);
-        }
-      }
-    };
-
-    syncProfile();
-  }, [isSignedIn, isUserLoaded, user]);
-
-  // Show bottom nav bar only for main tab screens
-  const showBottomNav = currentScreen === 'main' && ['home', 'chats', 'sell', 'myads', 'profile'].includes(activeNav);
+  // Show bottom nav bar only for main tab screens and NEVER during splash / loading screen
+  const showBottomNav = !authLoading && !showSplash && currentScreen === 'main' && ['home', 'chats', 'sell', 'myads', 'profile'].includes(activeNav);
 
   return (
     <div className="w-full h-full min-h-screen bg-white text-slate-900 font-sans overflow-hidden select-none relative flex flex-col justify-between">
       
       {/* 1. AUTH / MAIN SCREEN CONTENT WRAPPER */}
       <div className="flex-1 overflow-hidden relative w-full h-full">
-        {currentScreen === 'welcome' && (
-          <WelcomeScreen onNavigate={(screen) => setCurrentScreen(screen)} />
-        )}
-        {currentScreen === 'login' && (
-          <LoginScreen 
-            onNavigate={(screen) => setCurrentScreen(screen)} 
-          />
-        )}
-        {currentScreen === 'signup' && (
-          <SignupScreen 
-            onNavigate={(screen) => setCurrentScreen(screen)} 
-          />
-        )}
+        <AnimatePresence>
+          {(authLoading || showSplash) && (
+            <motion.div 
+              key="splash-screen"
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6, ease: 'easeInOut' }}
+              className="w-full h-full min-h-screen bg-[#1944F1] flex flex-col items-center justify-center text-white z-[999] fixed inset-0 pointer-events-none"
+            >
+              {/* Logo: Zooms down into position with smooth fade-in */}
+              <motion.div 
+                initial={{ opacity: 0, scale: 2.2 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                className="w-28 h-28 mb-4 drop-shadow-2xl flex items-center justify-center"
+              >
+                <img 
+                  src="/ic_launcher_foreground.svg" 
+                  alt="Campus Buddy Logo" 
+                  className="w-full h-full object-contain filter drop-shadow-lg"
+                />
+              </motion.div>
+
+              {/* Title Text: Character-level Staggered Fade-in */}
+              <motion.div className="flex items-center gap-1 overflow-hidden">
+                {"Campus Buddy".split("").map((char, index) => (
+                  <motion.span
+                    key={index}
+                    initial={{ opacity: 0, y: 12, filter: 'blur(4px)' }}
+                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    transition={{
+                      delay: 0.2 + index * 0.03,
+                      duration: 0.4,
+                      ease: "easeOut"
+                    }}
+                    className="text-2xl font-bold tracking-tight font-sans text-white inline-block"
+                  >
+                    {char === " " ? "\u00A0" : char}
+                  </motion.span>
+                ))}
+              </motion.div>
+
+              {/* Subtitle: Smooth Fade & Rise */}
+              <motion.p 
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6, duration: 0.5, ease: 'easeOut' }}
+                className="text-xs text-blue-100/90 mt-1 font-medium tracking-wide"
+              >
+                Connecting Students Safely
+              </motion.p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence mode="wait">
+          {!authLoading && currentScreen === 'welcome' && (
+            <WelcomeScreen key="welcome" onNavigate={(screen) => setCurrentScreen(screen)} />
+          )}
+          {!authLoading && currentScreen === 'login' && (
+            <LoginScreen 
+              key="login"
+              onNavigate={(screen) => setCurrentScreen(screen)} 
+              onLoginSuccess={handleLoginSuccess}
+            />
+          )}
+          {!authLoading && currentScreen === 'signup' && (
+            <SignupScreen 
+              key="signup"
+              onNavigate={(screen) => setCurrentScreen(screen)} 
+              onLoginSuccess={handleLoginSuccess}
+            />
+          )}
+        </AnimatePresence>
 
         {currentScreen === 'main' && (
           <AnimatePresence mode="wait">
@@ -412,18 +458,31 @@ export default function App() {
       )}
 
       {/* Floating Exit Toast for Android Back Button / Gesture */}
-      <AnimatePresence>
-        {showExitToast && (
+      {showExitToast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '96px',
+            left: 0,
+            right: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 100,
+            pointerEvents: 'none',
+          }}
+        >
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white text-xs font-semibold px-4.5 py-2.5 rounded-full shadow-2xl z-[100] backdrop-blur-md pointer-events-none whitespace-nowrap border border-white/10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            Press back again to exit Campus Buddy
+            <img src="/group_3.svg" alt="CB" style={{ width: '16px', height: '16px', objectFit: 'contain', borderRadius: '3px' }} />
+            <span style={{ color: '#000', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>Press back again to exit Campus Buddy</span>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }

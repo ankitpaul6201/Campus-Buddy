@@ -5,7 +5,6 @@ dns.setServers(['8.8.8.8', '1.1.1.1']);
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const { clerkMiddleware } = require('@clerk/express');
 require('dotenv').config();
 
 const app = express();
@@ -14,16 +13,28 @@ const app = express();
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token']
 }));
 app.use(express.json({ limit: '10mb' }));
-
-// Clerk middleware — must be before routes so req.auth is populated on all requests
-app.use(clerkMiddleware());
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/products', require('./routes/products'));
+app.use('/api/universities', require('./routes/universities'));
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    status: 'online',
+    message: 'Campus Buddy Backend API is running successfully!',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'connecting/disconnected',
+    endpoints: {
+      health: '/api/health',
+      products: '/api/products',
+      auth: '/api/auth'
+    }
+  });
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
