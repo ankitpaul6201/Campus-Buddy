@@ -83,11 +83,21 @@
 }
 
 @layer base {
-  html {
-    scroll-behavior: smooth;
+  html,
+  body {
+    scroll-behavior: auto;
     font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     color: #191D25;
     background-color: #FFFFFF;
+    overflow-x: clip;
+    max-width: 100vw;
+    width: 100%;
+  }
+
+  #root {
+    overflow-x: clip;
+    max-width: 100vw;
+    width: 100%;
   }
 
   /* Lenis smooth scrolling recommendations */
@@ -181,6 +191,19 @@
 .animate-grid-drift {
   animation: gridDrift 28s linear infinite;
   will-change: transform;
+}
+
+/* Fluid flow-in animation for ArrowButton (left to right from the arrow) */
+.arrow-btn-flow {
+  clip-path: inset(0 100% 0 0 round 9999px);
+  transition: clip-path 500ms cubic-bezier(0.2, 1, 0.3, 1);
+  will-change: clip-path;
+}
+
+.group:hover .arrow-btn-flow,
+.group:active .arrow-btn-flow,
+.arrow-btn-flow.is-flow-active {
+  clip-path: inset(0 0% 0 0 round 9999px);
 }
 
 @media (prefers-reduced-motion: reduce) {

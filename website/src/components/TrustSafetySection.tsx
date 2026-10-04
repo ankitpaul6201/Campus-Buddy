@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Users, ShieldCheck, MessageSquare, Flag, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { BlueAccentDoodle } from './Doodles';
 
 interface TrustSafetySectionProps {
   onLearnMore?: (topic: string) => void;
@@ -16,8 +15,8 @@ export const TrustSafetySection: React.FC<TrustSafetySectionProps> = ({ onLearnM
       tag: 'Campus Network'
     },
     {
-      title: 'Institutional Account Verification',
-      description: 'We authenticate student accounts through university email addresses (.ac.in / .edu) or college identity cards.',
+      title: 'Student Account Verification',
+      description: 'We authenticate student accounts through personal Gmail or university email alongside student identity cards.',
       icon: <ShieldCheck className="w-5 h-5 text-emerald-600" />,
       tag: 'ID Safeguard'
     },
@@ -42,10 +41,6 @@ export const TrustSafetySection: React.FC<TrustSafetySectionProps> = ({ onLearnM
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 sm:mb-14 relative">
           <div className="relative">
-            <div className="absolute -top-6 -left-3 w-8 pointer-events-none">
-              <BlueAccentDoodle />
-            </div>
-
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 inline-block mb-3">
               Trust & Community Safety
             </span>

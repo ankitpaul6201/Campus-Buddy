@@ -1,5 +1,4 @@
 import React, { useRef, useEffect } from 'react';
-import { motion, useMotionValue, useSpring, useMotionTemplate } from 'framer-motion';
 
 interface InfiniteGridProps {
   className?: string;
@@ -8,89 +7,69 @@ interface InfiniteGridProps {
 export const InfiniteGrid: React.FC<InfiniteGridProps> = ({ className = '' }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Mouse position and visibility motion values
-  const mouseX = useMotionValue(-1000);
-  const mouseY = useMotionValue(-1000);
-  const targetOpacity = useMotionValue(0);
-
-  // Smooth springs for fluid, organic cursor tracking and fade
-  const smoothMouseX = useSpring(mouseX, { stiffness: 180, damping: 25, mass: 0.1 });
-  const smoothMouseY = useSpring(mouseY, { stiffness: 180, damping: 25, mass: 0.1 });
-  const smoothOpacity = useSpring(targetOpacity, { stiffness: 140, damping: 20 });
-
-  // Dynamic radial gradients tied to the mouse coordinates
-  const glowRadialGradient = useMotionTemplate`radial-gradient(320px circle at ${smoothMouseX}px ${smoothMouseY}px, rgba(8, 96, 232, 0.11) 0%, rgba(56, 189, 248, 0.05) 45%, transparent 75%)`;
-  const gridMaskImage = useMotionTemplate`radial-gradient(280px circle at ${smoothMouseX}px ${smoothMouseY}px, black 0%, transparent 80%)`;
-
   useEffect(() => {
-    const parentSection = containerRef.current?.closest('section') || containerRef.current?.parentElement;
-    if (!parentSection) return;
+    const parent = containerRef.current?.parentElement;
+    if (!parent) return;
 
-    let rect = parentSection.getBoundingClientRect();
-    let ticking = false;
+    let rafId: number | null = null;
+    let targetX = -1000;
+    let targetY = -1000;
 
-    const updateRect = () => {
-      rect = parentSection.getBoundingClientRect();
-    };
+    const handlePointerMove = (e: PointerEvent) => {
+      const rect = parent.getBoundingClientRect();
+      targetX = e.clientX - rect.left;
+      targetY = e.clientY - rect.top;
 
-    window.addEventListener('resize', updateRect, { passive: true });
-    window.addEventListener('scroll', updateRect, { passive: true });
-
-    const handlePointerMove = (e: MouseEvent | PointerEvent) => {
-      if (ticking) return;
-      ticking = true;
-
-      requestAnimationFrame(() => {
-        ticking = false;
-        const isInside =
-          e.clientX >= rect.left &&
-          e.clientX <= rect.right &&
-          e.clientY >= rect.top &&
-          e.clientY <= rect.bottom;
-
-        if (isInside) {
-          mouseX.set(e.clientX - rect.left);
-          mouseY.set(e.clientY - rect.top);
-          targetOpacity.set(1);
-        } else {
-          targetOpacity.set(0);
-        }
-      });
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          if (containerRef.current) {
+            containerRef.current.style.setProperty('--mouse-x', `${targetX}px`);
+            containerRef.current.style.setProperty('--mouse-y', `${targetY}px`);
+            containerRef.current.style.setProperty('--spotlight-opacity', '1');
+          }
+          rafId = null;
+        });
+      }
     };
 
     const handlePointerLeave = () => {
-      targetOpacity.set(0);
+      if (containerRef.current) {
+        containerRef.current.style.setProperty('--spotlight-opacity', '0');
+      }
     };
 
-    window.addEventListener('pointermove', handlePointerMove, { passive: true });
-    window.addEventListener('blur', handlePointerLeave);
-    document.addEventListener('mouseleave', handlePointerLeave);
+    parent.addEventListener('pointermove', handlePointerMove, { passive: true });
+    parent.addEventListener('pointerleave', handlePointerLeave, { passive: true });
 
     return () => {
-      window.removeEventListener('resize', updateRect);
-      window.removeEventListener('scroll', updateRect);
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('blur', handlePointerLeave);
-      document.removeEventListener('mouseleave', handlePointerLeave);
+      parent.removeEventListener('pointermove', handlePointerMove);
+      parent.removeEventListener('pointerleave', handlePointerLeave);
+      if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [mouseX, mouseY, targetOpacity]);
+  }, []);
 
   return (
     <div
       ref={containerRef}
       className={`absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none z-0 ${className}`}
-      style={{
-        maskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 160px), transparent 100%)',
-        WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 160px), transparent 100%)',
-      }}
       aria-hidden="true"
+      style={{
+        background: `
+          linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.75) 75%, #ffffff 100%),
+          radial-gradient(ellipse 90% 60% at 50% 20%, rgba(8, 96, 232, 0.05) 0%, transparent 70%)
+        `,
+      }}
     >
-      {/* SVG Definitions for Grid Patterns */}
-      <svg className="absolute w-0 h-0" xmlns="http://www.w3.org/2000/svg">
+      {/* 1. Base Subtle Ambient Grid Layer */}
+      <svg
+        className="w-full h-full opacity-45"
+        xmlns="http://www.w3.org/2000/svg"
+        width="100%"
+        height="100%"
+      >
         <defs>
-          {/* Base 48px Fine Sub-Grid */}
           <pattern
-            id="staticSubGrid"
+            id="baseSubGrid"
             width="48"
             height="48"
             patternUnits="userSpaceOnUse"
@@ -103,14 +82,13 @@ export const InfiniteGrid: React.FC<InfiniteGridProps> = ({ className = '' }) =>
             />
           </pattern>
 
-          {/* Base 192px Major Grid with Crosshairs */}
           <pattern
-            id="staticMajorGrid"
+            id="baseMajorGrid"
             width="192"
             height="192"
             patternUnits="userSpaceOnUse"
           >
-            <rect width="192" height="192" fill="url(#staticSubGrid)" />
+            <rect width="192" height="192" fill="url(#baseSubGrid)" />
             <path
               d="M 192 0 L 0 0 0 192"
               fill="none"
@@ -119,60 +97,33 @@ export const InfiniteGrid: React.FC<InfiniteGridProps> = ({ className = '' }) =>
             />
             {/* Subtle Crosshairs */}
             <path
-              d="M 96 91 L 96 101 M 91 96 L 101 96"
+              d="M 96 90 L 96 102 M 90 96 L 102 96"
               fill="none"
-              stroke="rgba(8, 96, 232, 0.14)"
+              stroke="rgba(8, 96, 232, 0.15)"
               strokeWidth="1.2"
             />
-            <circle cx="0" cy="0" r="1.5" fill="rgba(8, 96, 232, 0.18)" />
-          </pattern>
-
-          {/* Active / Glowing 48px Sub-Grid under Mouse Pointer */}
-          <pattern
-            id="glowSubGrid"
-            width="48"
-            height="48"
-            patternUnits="userSpaceOnUse"
-          >
-            <path
-              d="M 48 0 L 0 0 0 48"
-              fill="none"
-              stroke="rgba(8, 96, 232, 0.16)"
-              strokeWidth="1.2"
-            />
-          </pattern>
-
-          {/* Active / Glowing 192px Major Grid with Glowing Intersections */}
-          <pattern
-            id="glowMajorGrid"
-            width="192"
-            height="192"
-            patternUnits="userSpaceOnUse"
-          >
-            <rect width="192" height="192" fill="url(#glowSubGrid)" />
-            <path
-              d="M 192 0 L 0 0 0 192"
-              fill="none"
-              stroke="rgba(8, 96, 232, 0.28)"
-              strokeWidth="1.4"
-            />
-            <path
-              d="M 96 89 L 96 103 M 89 96 L 103 96"
-              fill="none"
-              stroke="rgba(8, 96, 232, 0.45)"
-              strokeWidth="1.4"
-            />
-            <circle cx="0" cy="0" r="2.5" fill="rgba(8, 96, 232, 0.55)" />
+            <circle cx="0" cy="0" r="1.5" fill="rgba(8, 96, 232, 0.2)" />
           </pattern>
         </defs>
+        <rect width="100%" height="100%" fill="url(#baseMajorGrid)" />
       </svg>
 
-      {/* 1. Base Static Grid Layer with soft edge vignette fade */}
+      {/* 2. Interactive Spotlight Glow (Reacts to cursor hover) */}
       <div
-        className="absolute inset-0 w-full h-full"
+        className="absolute inset-0 transition-opacity duration-300 ease-out pointer-events-none"
         style={{
-          maskImage: 'radial-gradient(ellipse 85% 72% at 50% 40%, black 30%, transparent 95%)',
-          WebkitMaskImage: 'radial-gradient(ellipse 85% 72% at 50% 40%, black 30%, transparent 95%)',
+          opacity: 'var(--spotlight-opacity, 0)',
+          background: `radial-gradient(420px circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px), rgba(56, 189, 248, 0.15) 0%, rgba(8, 96, 232, 0.05) 50%, transparent 80%)`,
+        }}
+      />
+
+      {/* 3. Interactive Illuminated Grid (Highlighted under cursor) */}
+      <div
+        className="absolute inset-0 transition-opacity duration-300 ease-out pointer-events-none"
+        style={{
+          opacity: 'var(--spotlight-opacity, 0)',
+          maskImage: `radial-gradient(320px circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px), black 20%, transparent 100%)`,
+          WebkitMaskImage: `radial-gradient(320px circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px), black 20%, transparent 100%)`,
         }}
       >
         <svg
@@ -181,43 +132,48 @@ export const InfiniteGrid: React.FC<InfiniteGridProps> = ({ className = '' }) =>
           width="100%"
           height="100%"
         >
-          <rect width="100%" height="100%" fill="url(#staticMajorGrid)" />
+          <defs>
+            <pattern
+              id="activeSubGrid"
+              width="48"
+              height="48"
+              patternUnits="userSpaceOnUse"
+            >
+              <path
+                d="M 48 0 L 0 0 0 48"
+                fill="none"
+                stroke="rgba(8, 96, 232, 0.18)"
+                strokeWidth="1.2"
+              />
+            </pattern>
+
+            <pattern
+              id="activeMajorGrid"
+              width="192"
+              height="192"
+              patternUnits="userSpaceOnUse"
+            >
+              <rect width="192" height="192" fill="url(#activeSubGrid)" />
+              <path
+                d="M 192 0 L 0 0 0 192"
+                fill="none"
+                stroke="rgba(8, 96, 232, 0.35)"
+                strokeWidth="1.5"
+              />
+              {/* Illuminated Crosshairs & Glowing Intersection Dots */}
+              <path
+                d="M 96 88 L 96 104 M 88 96 L 104 96"
+                fill="none"
+                stroke="rgba(8, 96, 232, 0.55)"
+                strokeWidth="1.8"
+              />
+              <circle cx="0" cy="0" r="2.5" fill="rgba(8, 96, 232, 0.65)" />
+              <circle cx="96" cy="96" r="2" fill="rgba(56, 189, 248, 0.7)" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#activeMajorGrid)" />
         </svg>
       </div>
-
-      {/* 2. Interactive Light Blue Glow & Spotlight Reaction */}
-      <motion.div
-        className="absolute inset-0 w-full h-full pointer-events-none transform-gpu will-change-transform"
-        style={{
-          opacity: smoothOpacity,
-          maskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 150px), transparent 100%)',
-          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 150px), transparent 100%)',
-        }}
-      >
-        {/* Pure CSS Radial Glow (ultra-fast, zero GPU blur shader overhead) */}
-        <motion.div
-          className="absolute inset-0 w-full h-full"
-          style={{ background: glowRadialGradient }}
-        />
-
-        {/* Illuminated Grid lines focused immediately around the cursor */}
-        <motion.div
-          className="absolute inset-0 w-full h-full transform-gpu"
-          style={{
-            maskImage: gridMaskImage,
-            WebkitMaskImage: gridMaskImage,
-          }}
-        >
-          <svg
-            className="w-full h-full"
-            xmlns="http://www.w3.org/2000/svg"
-            width="100%"
-            height="100%"
-          >
-            <rect width="100%" height="100%" fill="url(#glowMajorGrid)" />
-          </svg>
-        </motion.div>
-      </motion.div>
     </div>
   );
 };

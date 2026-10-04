@@ -18,15 +18,15 @@ export const TextHoverEffect = ({
   const [hovered, setHovered] = useState(false);
   const [maskPosition, setMaskPosition] = useState<{ cx: number; cy: number }>({
     cx: 600,
-    cy: 85,
+    cy: 79.5,
   });
 
   // Title Case "Campus Buddy"
   const displayText = text || "Campus Buddy";
 
-  // Large 1200 x 170 viewBox for huge, bold, perfectly proportioned text
+  // 1200 x 159 viewBox for mathematically equal top and bottom gaps
   const viewBoxWidth = 1200;
-  const viewBoxHeight = 170;
+  const viewBoxHeight = 159;
 
   useEffect(() => {
     if (svgRef.current && cursor.x !== null && cursor.y !== null) {
@@ -57,7 +57,7 @@ export const TextHoverEffect = ({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
-      className={cn("select-none cursor-pointer overflow-visible block", className)}
+      className={cn("select-none cursor-pointer overflow-hidden block", className)}
     >
       <defs>
         {/* Depth gradient: Top part LIGHT (luminous white/ice), bottom part DARK (deep navy) */}
@@ -95,7 +95,7 @@ export const TextHoverEffect = ({
           id="revealMask"
           gradientUnits="userSpaceOnUse"
           r="260"
-          initial={{ cx: 600, cy: 85 }}
+          initial={{ cx: 600, cy: 79.5 }}
           animate={maskPosition}
           transition={{ duration: duration ?? 0, ease: "easeOut" }}
         >
@@ -129,9 +129,10 @@ export const TextHoverEffect = ({
       {/* Layer 1: Ambient Base Wordmark (Flawlessly unified, zero poking out artifacts) */}
       <text
         x="50%"
-        y="48%"
+        y="132"
         textAnchor="middle"
-        dominantBaseline="central"
+        textLength="1192"
+        lengthAdjust="spacing"
         strokeWidth="1.2"
         stroke="rgba(255, 255, 255, 0.4)"
         fill="url(#textLightToDark)"
@@ -147,9 +148,10 @@ export const TextHoverEffect = ({
       {/* Layer 2: Interactive Spotlight Hover Reveal Layer (Exact same baseline & coordinates) */}
       <text
         x="50%"
-        y="48%"
+        y="132"
         textAnchor="middle"
-        dominantBaseline="central"
+        textLength="1192"
+        lengthAdjust="spacing"
         stroke="url(#textGradient)"
         fill="url(#textGradient)"
         strokeWidth="1.2"

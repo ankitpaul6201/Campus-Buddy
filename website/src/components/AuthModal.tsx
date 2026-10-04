@@ -104,14 +104,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <form onSubmit={handleSubmit} className="space-y-3.5">
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-700 mb-1">
-                    College / University Email
+                    Email Address (Personal Gmail or College Email)
                   </label>
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="student@dtu.ac.in or .edu"
+                    placeholder="name@gmail.com or student@college.edu"
                     className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-brand-border focus:border-brand-blue focus:ring-1 focus:ring-brand-blue focus:outline-none"
                   />
                 </div>

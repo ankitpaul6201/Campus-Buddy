@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ShoppingBag, Tag, CheckCircle2, ArrowRight } from 'lucide-react';
-import { OrangeUnderline } from './Doodles';
+import { ShoppingBag, Tag, CheckCircle2 } from 'lucide-react';
+import { ArrowButton } from './ui/Button';
 
 interface BuyerSellerBenefitsProps {
   onBuyerCTA: () => void;
@@ -38,9 +38,6 @@ export const BuyerSellerBenefits: React.FC<BuyerSellerBenefitsProps> = ({
 
           <h2 className="text-[28px] sm:text-[38px] font-extrabold text-brand-dark leading-[1.18] tracking-tight relative inline-block">
             Built for Buyers & Sellers Alike
-            <div className="absolute -bottom-2.5 left-0 w-full">
-              <OrangeUnderline />
-            </div>
           </h2>
 
           <p className="mt-4 text-brand-secondary text-[13.5px] sm:text-[14.5px] leading-relaxed">
@@ -87,13 +84,9 @@ export const BuyerSellerBenefits: React.FC<BuyerSellerBenefitsProps> = ({
             </div>
 
             <div className="mt-8 pt-6 border-t border-gray-200/60">
-              <button
-                onClick={onBuyerCTA}
-                className="w-full sm:w-auto px-7 py-3 bg-brand-btnDark hover:bg-black text-white text-[13px] font-semibold rounded-full shadow-xs hover:shadow transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 group"
-              >
-                <span>Find Essentials</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
+              <ArrowButton onClick={onBuyerCTA}>
+                Find Essentials
+              </ArrowButton>
             </div>
           </motion.div>
 
@@ -133,13 +126,9 @@ export const BuyerSellerBenefits: React.FC<BuyerSellerBenefitsProps> = ({
             </div>
 
             <div className="mt-8 pt-6 border-t border-gray-200/60">
-              <button
-                onClick={onSellerCTA}
-                className="w-full sm:w-auto px-7 py-3 bg-brand-orange hover:bg-orange-600 text-white text-[13px] font-semibold rounded-full shadow-xs hover:shadow transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 group"
-              >
-                <span>Start Selling</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
+              <ArrowButton onClick={onSellerCTA}>
+                Start Selling
+              </ArrowButton>
             </div>
           </motion.div>
 

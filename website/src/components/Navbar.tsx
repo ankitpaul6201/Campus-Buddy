@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Download, Home, Compass, Store, Users, HelpCircle } from 'lucide-react';
+import { Menu, X, Download, Home, Compass, Store, Users, HelpCircle, CreditCard } from 'lucide-react';
 import { NavBar, NavItem } from './ui/tubelight-navbar';
+import { FlipButton } from './ui/Button';
 
 const tubelightNavItems: NavItem[] = [
   { name: 'Home', url: '#home', icon: Home },
   { name: 'About', url: '#about', icon: Compass },
   { name: 'Marketplace', url: '#marketplace', icon: Store },
+  { name: 'Pricing', url: '#pricing', icon: CreditCard },
   { name: 'Community', url: '#community', icon: Users },
   { name: 'FAQs', url: '#faqs', icon: HelpCircle },
 ];
@@ -14,42 +16,63 @@ const tubelightNavItems: NavItem[] = [
 interface NavbarProps {
   onDownloadClick?: () => void;
   activeSection?: string;
+  onNavigateSection?: (sectionId: string) => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onDownloadClick, activeSection = 'home' }) => {
+export const Navbar: React.FC<NavbarProps> = ({ 
+  onDownloadClick, 
+  activeSection = 'home',
+  onNavigateSection 
+}) => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(activeSection);
+  const isNavClickRef = useRef(false);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let ticking = false;
+
     const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
+      if (ticking) return;
+      ticking = true;
 
-      // Determine active section on scroll
-      const sections = ['home', 'about', 'marketplace', 'community', 'faqs'];
-      const scrollPos = window.scrollY + 140;
+      requestAnimationFrame(() => {
+        ticking = false;
+        setScrolled(window.scrollY > 20);
 
-      for (const section of sections) {
-        const el = document.getElementById(section);
-        if (el) {
-          const top = el.offsetTop;
-          const height = el.offsetHeight;
-          if (scrollPos >= top && scrollPos < top + height) {
-            setActiveTab(section);
-            break;
+        // Don't override active tab while smooth scrolling from a user click
+        if (isNavClickRef.current) return;
+
+        const sections = ['home', 'about', 'marketplace', 'pricing', 'community', 'faqs'];
+        const scrollPos = window.scrollY + 160;
+
+        for (const section of sections) {
+          const el = document.getElementById(section);
+          if (el) {
+            const top = el.offsetTop;
+            const height = el.offsetHeight;
+            if (scrollPos >= top && scrollPos < top + height) {
+              setActiveTab(section);
+              break;
+            }
           }
         }
-      }
+      });
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    };
   }, []);
 
   const navLinks = [
     { id: 'home', label: 'Home' },
     { id: 'about', label: 'About' },
     { id: 'marketplace', label: 'Marketplace' },
+    { id: 'pricing', label: 'Pricing' },
     { id: 'community', label: 'Community' },
     { id: 'faqs', label: 'FAQs' },
   ];
@@ -57,9 +80,27 @@ export const Navbar: React.FC<NavbarProps> = ({ onDownloadClick, activeSection =
   const scrollToSection = (id: string) => {
     setActiveTab(id);
     setMobileMenuOpen(false);
+
+    if (onNavigateSection) {
+      onNavigateSection(id);
+      return;
+    }
+
+    // Lock scroll spy while smooth scrolling to clicked target
+    isNavClickRef.current = true;
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = setTimeout(() => {
+      isNavClickRef.current = false;
+    }, 800);
+
     const element = document.getElementById(id);
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
+      const lenis = (window as any).__lenis;
+      if (lenis) {
+        lenis.scrollTo(element, { offset: -70, duration: 1.2 });
+      } else {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
     }
   };
 
@@ -69,21 +110,23 @@ export const Navbar: React.FC<NavbarProps> = ({ onDownloadClick, activeSection =
     } else {
       const el = document.getElementById('download');
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth' });
+        const lenis = (window as any).__lenis;
+        if (lenis) {
+          lenis.scrollTo(el, { offset: -70, duration: 1.2 });
+        } else {
+          el.scrollIntoView({ behavior: 'smooth' });
+        }
       }
     }
   };
 
   return (
     <>
-      <motion.header
-        initial={{ opacity: 0, y: -12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
+      <header
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           scrolled
-            ? 'bg-white/90 backdrop-blur-md shadow-xs py-3'
-            : 'bg-transparent py-5'
+            ? 'bg-white/70 backdrop-blur-xl saturate-150 border-b border-white/60 shadow-[0_8px_30px_rgba(8,96,232,0.06),0_1px_3px_rgba(0,0,0,0.03)] py-3 rounded-b-2xl sm:rounded-b-3xl'
+            : 'bg-transparent border-transparent shadow-none py-5'
         }`}
       >
         <div className="max-w-6xl mx-auto px-5 sm:px-8 flex items-center justify-between">
@@ -103,7 +146,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onDownloadClick, activeSection =
               </svg>
             </div>
             <span className="font-extrabold text-[17px] tracking-tight text-brand-dark">
-              Campus Buddy<span className="text-brand-blue">.</span>
+              Campus Buddy<span className="text-brand-blue"></span>
             </span>
           </a>
 
@@ -116,26 +159,26 @@ export const Navbar: React.FC<NavbarProps> = ({ onDownloadClick, activeSection =
             />
           </div>
 
-          {/* Right Action: Download App Button (Replacing Login & Register) */}
+          {/* Right Action: Download App Button */}
           <div className="hidden md:flex items-center gap-2.5">
-            <button
+            <FlipButton
+              variant="dark"
               onClick={handleDownload}
-              className="px-5 py-2.5 bg-brand-btnDark hover:bg-black text-white text-[13px] font-semibold rounded-full shadow-[0_4px_14px_rgba(25,29,37,0.15)] hover:-translate-y-0.5 active:scale-98 transition-all duration-200 cursor-pointer flex items-center gap-2 group"
+              className="py-2.5 px-5 text-[13px] rounded-full shadow-[0_4px_14px_rgba(25,29,37,0.15)]"
             >
-              <Download className="w-3.5 h-3.5 text-brand-lightLine group-hover:translate-y-0.5 transition-transform" />
-              <span>Download App</span>
-            </button>
+              Download App
+            </FlipButton>
           </div>
 
           {/* Mobile Hamburger Toggle & Compact Download Button */}
           <div className="md:hidden flex items-center gap-2">
-            <button
+            <FlipButton
+              variant="dark"
               onClick={handleDownload}
-              className="px-3.5 py-1.5 bg-brand-btnDark text-white text-xs font-semibold rounded-full flex items-center gap-1.5 shadow-xs"
+              className="px-3.5 py-1.5 text-xs font-semibold rounded-full shadow-xs"
             >
-              <Download className="w-3 h-3 text-brand-lightLine" />
-              <span>Get App</span>
-            </button>
+              Get App
+            </FlipButton>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 text-brand-dark rounded-lg hover:bg-gray-100"
@@ -146,23 +189,23 @@ export const Navbar: React.FC<NavbarProps> = ({ onDownloadClick, activeSection =
           </div>
 
         </div>
-      </motion.header>
+      </header>
 
-      {/* Mobile Dropdown Menu */}
+      {/* Mobile Dropdown Menu (Glassmorphic) */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed inset-x-0 top-[60px] z-30 bg-white/95 backdrop-blur-lg border-b border-gray-100 px-6 py-6 shadow-xl md:hidden"
+            exit={{ opacity: 0, y: -10 }}
+            className="fixed inset-x-4 top-[70px] z-50 bg-white/80 backdrop-blur-2xl border border-white/80 rounded-3xl p-6 shadow-[0_20px_50px_rgba(8,96,232,0.12)] md:hidden"
           >
             <div className="flex flex-col space-y-3">
               {navLinks.map((link) => (
                 <button
                   key={link.id}
                   onClick={() => scrollToSection(link.id)}
-                  className={`text-left py-2 text-sm font-medium border-b border-gray-50 ${
+                  className={`text-left py-2 text-sm font-medium border-b border-gray-100/60 ${
                     activeTab === link.id ? 'text-brand-blue font-bold' : 'text-gray-700'
                   }`}
                 >
@@ -189,4 +232,3 @@ export const Navbar: React.FC<NavbarProps> = ({ onDownloadClick, activeSection =
     </>
   );
 };
-

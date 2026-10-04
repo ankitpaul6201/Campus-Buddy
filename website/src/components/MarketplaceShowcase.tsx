@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Sparkles, ShieldCheck, Heart, ArrowUpRight } from 'lucide-react';
-import { BlueAccentDoodle } from './Doodles';
+import { FlipButton } from './ui/Button';
 
 interface ShowcaseItem {
   id: string;
@@ -123,10 +123,6 @@ export const MarketplaceShowcase: React.FC<MarketplaceShowcaseProps> = ({ onItem
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 relative">
           <div className="relative">
-            <div className="absolute -top-6 -left-3 w-8 pointer-events-none">
-              <BlueAccentDoodle />
-            </div>
-
             <span className="text-[11px] font-bold uppercase tracking-wider text-brand-blue bg-blue-50 px-3 py-1 rounded-full border border-blue-100 inline-block mb-3">
               In-App Marketplace Preview
             </span>
@@ -281,12 +277,13 @@ export const MarketplaceShowcase: React.FC<MarketplaceShowcaseProps> = ({ onItem
             </div>
           </div>
 
-          <button
+          <FlipButton
+            variant="dark"
             onClick={onItemClick}
-            className="px-6 py-2.5 bg-brand-btnDark hover:bg-black text-white text-[12.5px] font-semibold rounded-full shadow-xs hover:shadow transition-all shrink-0 cursor-pointer"
+            className="px-6 py-2.5 text-[12.5px] shrink-0"
           >
             Open in App
-          </button>
+          </FlipButton>
         </div>
 
       </div>

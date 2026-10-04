@@ -229,7 +229,7 @@ export const FAQS: FAQItem[] = [
   {
     id: 'faq2',
     question: 'Who can use Campus Buddy?',
-    answer: 'Campus Buddy is designed exclusively for college students and faculty. You can sign up using your institutional college email or student ID to access verified peer-to-peer listings on your campus.'
+    answer: 'Campus Buddy is designed for college students and faculty. You can sign up using your personal Gmail or institutional college email to access verified peer-to-peer listings on your campus.'
   },
   {
     id: 'faq3',
@@ -260,6 +260,11 @@ export const FAQS: FAQItem[] = [
     id: 'faq8',
     question: 'Where can I report a problem?',
     answer: 'You can report suspicious listings, inappropriate behavior, or app issues directly using the in-app "Report" button, or contact our student support team anytime at support@campusbuddy.in.'
+  },
+  {
+    id: 'faq9',
+    question: 'Can I offer my skills or freelance services on Campus Buddy?',
+    answer: 'Yes! We are launching our Student Skill Exchange feature soon. Students skilled in coding, photography, graphic design, video editing, or tutoring will be able to list their services, connect with campus peers who need assistance, and earn an income right on campus with zero platform cuts.'
   }
 ];
 
@@ -268,74 +273,121 @@ export interface CategoryItem {
   name: string;
   description: string;
   itemCount: string;
+  stats: string;
+  badge?: string;
   popularItems: string[];
   iconType: string;
   gradient: string;
+  image: string;
+  themeColor: string;
+  buttonBg: string;
 }
 
 export const MARKETPLACE_CATEGORIES: CategoryItem[] = [
   {
     id: 'textbooks',
-    name: 'Textbooks and Notes',
+    name: 'Textbooks & Notes',
     description: 'Semester reference books, syllabus guides, and verified handwritten lecture notes.',
     itemCount: '350+ items',
+    stats: '350+ Listings • Verified Notes',
     popularItems: ['Engineering Math', 'Data Structures', 'GATE Notes'],
     iconType: 'book',
-    gradient: 'from-[#0860E8]/10 to-[#9DD6FA]/20'
+    gradient: 'from-[#0860E8]/10 to-[#9DD6FA]/20',
+    image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=900&auto=format&fit=crop&q=85',
+    themeColor: '#0860E8',
+    buttonBg: 'from-[#0860E8]/95 to-[#0284C7]/95'
   },
   {
     id: 'stationery',
-    name: 'Stationery & Academic Supplies',
+    name: 'Stationery & Supplies',
     description: 'Lab record files, graph pads, geometry kits, compasses, and artist materials.',
     itemCount: '180+ items',
+    stats: '180+ Tools • Sheet Holders',
     popularItems: ['Lab Manuals', 'Sheet Containers', 'Marker Sets'],
     iconType: 'pen',
-    gradient: 'from-[#FF874B]/10 to-[#FFA97A]/25'
+    gradient: 'from-[#FF874B]/10 to-[#FFA97A]/25',
+    image: 'https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=900&auto=format&fit=crop&q=85',
+    themeColor: '#EA580C',
+    buttonBg: 'from-[#EA580C]/95 to-[#F97316]/95'
   },
   {
     id: 'calculators',
-    name: 'Calculators and Drafter Sets',
+    name: 'Calculators & Drafters',
     description: 'Scientific & graphic calculators, mini drafters, T-squares, and engineering tools.',
     itemCount: '120+ items',
+    stats: '120+ Sets • Casio 991EX',
     popularItems: ['Casio fx-991EX', 'Mini Drafters', 'Engineering Rulers'],
     iconType: 'calculator',
-    gradient: 'from-[#10B981]/10 to-[#6EE7B7]/25'
+    gradient: 'from-[#10B981]/10 to-[#6EE7B7]/25',
+    image: 'https://images.unsplash.com/photo-1587145820266-a5951ee6f620?w=900&auto=format&fit=crop&q=85',
+    themeColor: '#059669',
+    buttonBg: 'from-[#059669]/95 to-[#10B981]/95'
   },
   {
     id: 'cycles',
-    name: 'Cycles and Commuting',
+    name: 'Cycles & Mobility',
     description: 'Campus-friendly geared & single-speed bicycles, helmets, locks, and accessories.',
     itemCount: '65+ items',
+    stats: '65+ Bicycles • U-Locks',
     popularItems: ['Hero Sprint', 'Firefox Bicycles', 'U-Locks'],
     iconType: 'bike',
-    gradient: 'from-[#6366F1]/10 to-[#A5B4FC]/25'
+    gradient: 'from-[#2563EB]/10 to-[#60A5FA]/25',
+    image: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=900&auto=format&fit=crop&q=85',
+    themeColor: '#2563EB',
+    buttonBg: 'from-[#2563EB]/95 to-[#3B82F6]/95'
   },
   {
     id: 'electronics',
-    name: 'Electronics and Gadgets',
+    name: 'Electronics & Gadgets',
     description: 'Study desk lamps, power banks, extension boards, earphones, and monitors.',
     itemCount: '210+ items',
+    stats: '210+ Gadgets • Desk Lamps',
     popularItems: ['LED Desk Lamps', 'Extension Spikes', 'Bluetooth Speakers'],
     iconType: 'gadgets',
-    gradient: 'from-[#EC4899]/10 to-[#F472B6]/25'
+    gradient: 'from-[#0284C7]/10 to-[#38BDF8]/25',
+    image: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=900&auto=format&fit=crop&q=85',
+    themeColor: '#0284C7',
+    buttonBg: 'from-[#0284C7]/95 to-[#38BDF8]/95'
   },
   {
     id: 'hostel',
-    name: 'Hostel and Dorm Essentials',
+    name: 'Hostel & Dorm Gear',
     description: 'Electric kettles, study organizers, mattresses, laundry hampers, and room coolers.',
     itemCount: '190+ items',
+    stats: '190+ Essentials • Kettles',
     popularItems: ['Electric Kettles', 'Laundry Bags', 'Hangers & Buckets'],
     iconType: 'home',
-    gradient: 'from-[#F59E0B]/10 to-[#FCD34D]/25'
+    gradient: 'from-[#D97706]/10 to-[#F59E0B]/25',
+    image: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=900&auto=format&fit=crop&q=85',
+    themeColor: '#D97706',
+    buttonBg: 'from-[#D97706]/95 to-[#F59E0B]/95'
+  },
+  {
+    id: 'skills',
+    name: 'Student Skills & Gigs',
+    description: 'Hire talented campus peers or offer your skills in coding, photography, graphic design, and video editing to earn.',
+    itemCount: 'Upcoming',
+    stats: 'Upcoming • Coding, Photos, Design',
+    badge: 'Launching Soon',
+    popularItems: ['Coding & Dev', 'Photography', 'UI/UX & Graphics'],
+    iconType: 'code',
+    gradient: 'from-[#0860E8]/12 to-[#38BDF8]/20',
+    image: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=900&auto=format&fit=crop&q=85',
+    themeColor: '#0860E8',
+    buttonBg: 'from-[#0860E8]/95 to-[#38BDF8]/95'
   },
   {
     id: 'other',
-    name: 'Other Student Essentials',
+    name: 'Campus Life & Essentials',
     description: 'Sports equipment, musical instruments, bags, lab coats, and campus event tickets.',
     itemCount: '95+ items',
+    stats: '95+ Items • Sports & Labs',
     popularItems: ['Badminton Rackets', 'Lab Coats', 'Guitar Picks'],
     iconType: 'sparkles',
-    gradient: 'from-[#8B5CF6]/10 to-[#C4B5FD]/25'
+    gradient: 'from-[#334155]/10 to-[#64748B]/25',
+    image: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=900&auto=format&fit=crop&q=85',
+    themeColor: '#334155',
+    buttonBg: 'from-[#334155]/95 to-[#64748B]/95'
   }
 ];
 
@@ -343,7 +395,7 @@ export const HOW_IT_WORKS_STEPS = [
   {
     step: '01',
     title: 'Download the app',
-    description: 'Install Campus Buddy on your phone and create your student account using your college email.',
+    description: 'Install Campus Buddy on your phone and create your student account using your personal Gmail or college email.',
     badge: 'Step 1'
   },
   {
@@ -389,7 +441,7 @@ export const TRUST_SAFETY_POINTS = [
   },
   {
     title: 'Institutional Account Verification',
-    description: 'Students verify via college email or official ID card checks before trading on campus.',
+    description: 'Students verify via personal Gmail or college email alongside official ID card checks before trading on campus.',
     icon: 'shield-check'
   },
   {

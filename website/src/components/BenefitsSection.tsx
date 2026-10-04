@@ -1,6 +1,5 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { BlueAccentDoodle } from './Doodles';
 
 // Restrained, colorful illustrative icons matching screenshot style
 const MarketplaceIcon = () => (
@@ -72,11 +71,6 @@ export const BenefitsSection: React.FC = () => {
           
           {/* Left Block */}
           <div className="lg:col-span-4 relative">
-            {/* Doodle stroke */}
-            <div className="absolute -top-6 -left-3 w-8 pointer-events-none">
-              <BlueAccentDoodle />
-            </div>
-
             <motion.h2
               initial={{ opacity: 0, y: 18 }}
               whileInView={{ opacity: 1, y: 0 }}

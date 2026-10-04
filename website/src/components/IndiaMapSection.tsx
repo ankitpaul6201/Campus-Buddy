@@ -3,16 +3,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
   MapPin,
-  ChevronDown,
   CheckCircle2,
-  XCircle,
   X,
-  Loader2
+  Loader2,
+  GraduationCap,
+  School,
+  Award,
+  Coins,
+  Rocket,
+  Gift,
+  Send,
+  Users
 } from 'lucide-react';
-import { IndiaMap } from './IndiaMap';
-import { COLLEGES, isCampusAvailable, AVAILABLE_CAMPUS } from '../data/mockData';
-import { MapLocationPin } from '../types';
-import { CurvedThreadDoodle } from './Doodles';
+import { InteractiveGlobe } from './InteractiveGlobe';
+import { COLLEGES, isCampusAvailable } from '../data/mockData';
 
 interface IndiaMapSectionProps {
   onSearch?: (college: string) => void;
@@ -29,15 +33,20 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // Search result state (only populated after clicking search button)
+  // Search result state
   const [searchResult, setSearchResult] = useState<{
     collegeName: string;
     isAvailable: boolean;
   } | null>(null);
 
+  // Campus Ambassador Modal State (shown when searched college is not available)
+  const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
+  const [ambassadorCollege, setAmbassadorCollege] = useState('');
+  const [applicationSubmitted, setApplicationSubmitted] = useState(false);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -49,6 +58,13 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Automatically clear search result banner whenever search bar is emptied
+  useEffect(() => {
+    if (!inputValue.trim()) {
+      setSearchResult(null);
+    }
+  }, [inputValue]);
 
   // Fetch colleges from MongoDB database (/api/universities) as user types
   useEffect(() => {
@@ -98,22 +114,11 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
         // Backend error or network timeout — fallback to local database
       }
 
-      // Local fallback from Indian college dataset if MongoDB backend is not active
+      // Local fallback from Indian college dataset
       const lower = trimmed.toLowerCase();
       const localMatches: CollegeSuggestion[] = COLLEGES
         .filter((c) => c.toLowerCase().includes(lower))
         .map((c) => ({ name: c }));
-
-      // Also ensure SVIET is suggested if typing sviet / swami
-      if (
-        (lower.includes('sv') || lower.includes('sviet') || lower.includes('swami')) &&
-        !localMatches.some((m) => isCampusAvailable(m.name))
-      ) {
-        localMatches.unshift({
-          name: 'SVIET Chandigarh',
-          location: 'Banur / Chandigarh, Punjab'
-        });
-      }
 
       setSuggestions(localMatches);
       setIsLoadingSuggestions(false);
@@ -126,7 +131,7 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
     };
   }, [inputValue]);
 
-  // Execute availability check ONLY after clicking the search button or pressing enter
+  // Execute availability check
   const handlePerformSearch = (collegeToSearch: string) => {
     const target = collegeToSearch.trim();
     if (!target) return;
@@ -136,6 +141,13 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
       collegeName: target,
       isAvailable: available
     });
+
+    // If college is not available, automatically open the Campus Ambassador modal
+    if (!available) {
+      setAmbassadorCollege(target);
+      setShowAmbassadorModal(true);
+      setApplicationSubmitted(false);
+    }
 
     setIsDropdownOpen(false);
     if (onSearch) onSearch(target);
@@ -149,71 +161,62 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
   const handleSelectSuggestion = (collegeName: string) => {
     setInputValue(collegeName);
     setIsDropdownOpen(false);
-    // User can click search icon or we can check on select
     handlePerformSearch(collegeName);
   };
 
-  const handlePinSelect = (pin: MapLocationPin) => {
-    setInputValue(pin.name);
-    handlePerformSearch(pin.name);
+  const handleCampusSelect = (name: string) => {
+    setInputValue(name);
+    handlePerformSearch(name);
   };
 
   return (
-    <section id="marketplace" className="py-20 sm:py-28 bg-[#FFFFFF] relative overflow-hidden">
-      {/* Decorative Light-Blue Looping Thread on the right side behind text */}
-      <div className="absolute top-1/4 right-0 w-[420px] pointer-events-none opacity-70 z-0">
-        <CurvedThreadDoodle />
-      </div>
-
+    <section id="campuses" className="py-8 sm:py-10 bg-[#FFFFFF] relative overflow-hidden">
       <div className="max-w-6xl mx-auto px-5 sm:px-8 relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center">
           
-          {/* Left Column: India Halftone Map with Pins */}
+          {/* Left Column: 3D Dotted Rotating Interactive Globe */}
           <motion.div
-            initial={{ opacity: 0, x: -30 }}
+            initial={{ opacity: 0, x: -24 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
             className="lg:col-span-6 w-full flex justify-center"
           >
-            <IndiaMap onSelectPin={handlePinSelect} selectedCollege={searchResult?.collegeName} />
+            <InteractiveGlobe onSelectCampus={handleCampusSelect} selectedCollege={searchResult?.collegeName} />
           </motion.div>
 
           {/* Right Column: Heading, Copy, and College Search Bar */}
           <motion.div
-            initial={{ opacity: 0, x: 30 }}
+            initial={{ opacity: 0, x: 24 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
             className="lg:col-span-6 flex flex-col items-start"
           >
-            <h2 className="text-[32px] sm:text-[40px] font-extrabold text-brand-dark leading-[1.15] tracking-tight">
+            <h2 className="text-[28px] sm:text-[34px] font-extrabold text-brand-dark leading-[1.18] tracking-tight">
               Check If We're Available<br />
               On Your Campus!
             </h2>
 
-            <p className="mt-4 text-brand-secondary text-[13.5px] sm:text-[14.5px] leading-relaxed max-w-md">
-              Search your college or university below to see if Campus Buddy is live in your campus community. Currently available exclusively at SVIET Chandigarh!
+            <p className="mt-2 text-brand-secondary text-[13.5px] sm:text-[14px] leading-relaxed max-w-lg">
+              Search your college below or explore the 3D globe to check whether Campus Buddy is available on your campus.
             </p>
 
-            {/* College Search Box (Categories removed, single college search pill) */}
-            <div className="relative w-full max-w-xl mt-8" ref={dropdownRef}>
+            {/* College Search Box */}
+            <div className="relative w-full max-w-xl mt-5" ref={dropdownRef}>
               <form
                 onSubmit={handleFormSubmit}
-                className="w-full bg-white border border-[#E8EBF0] p-2 pl-4 sm:pl-5 rounded-full shadow-[0_10px_30px_rgba(8,96,232,0.06),0_2px_8px_rgba(0,0,0,0.04)] flex items-center justify-between gap-3 transition-all hover:border-brand-blue/40 relative z-30"
+                className="w-full bg-white border border-[#E8EBF0] p-1.5 pl-4 sm:pl-5 rounded-full shadow-[0_8px_24px_rgba(8,96,232,0.06),0_2px_6px_rgba(0,0,0,0.04)] flex items-center justify-between gap-3 transition-all hover:border-brand-blue/40 relative z-30"
               >
-                {/* Location / College Search Input field */}
+                {/* Search Input field */}
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-orange-50 flex items-center justify-center shrink-0">
-                    <MapPin className="w-4 h-4 text-brand-orange" />
+                  <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                    <MapPin className="w-4 h-4 text-brand-blue" />
                   </div>
                   <div className="flex flex-col min-w-0 flex-1">
-                    <label
-                      htmlFor="college-search-input"
-                      className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-                    >
-                      Location <ChevronDown className="w-2.5 h-2.5" />
-                    </label>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      Search College
+                    </span>
                     <div className="relative flex items-center">
                       <input
                         id="college-search-input"
@@ -221,7 +224,11 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
                         type="text"
                         value={inputValue}
                         onChange={(e) => {
-                          setInputValue(e.target.value);
+                          const val = e.target.value;
+                          setInputValue(val);
+                          if (!val.trim()) {
+                            setSearchResult(null);
+                          }
                           setIsDropdownOpen(true);
                         }}
                         onFocus={() => {
@@ -230,7 +237,7 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
                           }
                         }}
                         placeholder="Search your college or university..."
-                        className="bg-transparent text-[13px] font-bold text-brand-dark focus:outline-none w-full truncate pr-6 placeholder:font-normal placeholder:text-gray-400"
+                        className="bg-transparent text-[13px] font-semibold text-brand-dark focus:outline-none w-full truncate pr-6 placeholder:font-normal placeholder:text-gray-400"
                         autoComplete="off"
                       />
                       {inputValue && (
@@ -242,7 +249,7 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
                             inputRef.current?.focus();
                           }}
                           className="absolute right-0 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
-                          aria-label="Clear college search"
+                          aria-label="Clear search"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -254,7 +261,7 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
                 {/* Circular Dark Search Button */}
                 <button
                   type="submit"
-                  className="w-12 h-12 rounded-full bg-brand-btnDark hover:bg-black text-white flex items-center justify-center shrink-0 shadow-md transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
+                  className="w-11 h-11 rounded-full bg-brand-btnDark hover:bg-black text-white flex items-center justify-center shrink-0 shadow-md transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
                   aria-label="Check campus availability"
                   title="Check campus availability"
                 >
@@ -262,7 +269,7 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
                 </button>
               </form>
 
-              {/* Autocomplete Dropdown from MongoDB Database */}
+              {/* Autocomplete Dropdown */}
               <AnimatePresence>
                 {isDropdownOpen && inputValue.trim().length >= 2 && (
                   <motion.div
@@ -273,7 +280,7 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
                     className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 z-40 max-h-64 overflow-y-auto"
                   >
                     <div className="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-50 flex items-center justify-between">
-                      <span>Select College from Database</span>
+                      <span>Select College</span>
                       {isLoadingSuggestions && (
                         <Loader2 className="w-3 h-3 text-brand-blue animate-spin" />
                       )}
@@ -286,7 +293,7 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
                             key={`${item.name}-${idx}`}
                             type="button"
                             onClick={() => handleSelectSuggestion(item.name)}
-                            className="w-full text-left px-3 py-2.5 rounded-xl text-[12.5px] transition-colors flex items-center justify-between gap-2 hover:bg-gray-50 text-gray-700 cursor-pointer"
+                            className="w-full text-left px-3 py-2 rounded-xl text-[12.5px] transition-colors flex items-center justify-between gap-2 hover:bg-gray-50 text-gray-700 cursor-pointer"
                           >
                             <div className="flex items-center gap-2.5 truncate">
                               <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
@@ -311,7 +318,7 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
                             onClick={() => handleSelectSuggestion(inputValue)}
                             className="mt-1.5 text-[12px] font-bold text-brand-blue hover:underline cursor-pointer"
                           >
-                            Search "{inputValue}" anyway →
+                            Check "{inputValue}" anyway →
                           </button>
                         </div>
                       ) : null}
@@ -321,20 +328,20 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
               </AnimatePresence>
             </div>
 
-            {/* Availability Result (Displayed ONLY after clicking the search button) */}
+            {/* Inline Availability Result */}
             <AnimatePresence mode="wait">
-              {searchResult && (
+              {searchResult && inputValue.trim().length > 0 && (
                 <motion.div
                   key={searchResult.collegeName + (searchResult.isAvailable ? '-avail' : '-unavail')}
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.2 }}
-                  className="mt-4 w-full max-w-xl"
+                  className="mt-3.5 w-full max-w-xl"
                 >
                   {searchResult.isAvailable ? (
-                    /* AVAILABLE STATUS: SVIET Chandigarh */
-                    <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between gap-3 shadow-xs">
+                    /* AVAILABLE STATUS */
+                    <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-xs">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-8 h-8 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0 text-emerald-600">
                           <CheckCircle2 className="w-4 h-4" />
@@ -350,62 +357,233 @@ export const IndiaMapSection: React.FC<IndiaMapSectionProps> = ({ onSearch }) =>
                             </span>
                           </div>
                           <p className="text-[12px] text-emerald-800 mt-0.5">
-                            Campus Buddy is currently live and available at this campus!
+                            Campus Buddy is live and available on this campus!
                           </p>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    /* NOT AVAILABLE STATUS: Any other college */
-                    <div className="bg-rose-50/90 border border-rose-200/90 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between gap-3 shadow-xs">
+                    /* NOT AVAILABLE STATUS: Prompt to become Ambassador */
+                    <div className="bg-blue-50/80 border border-blue-200/90 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-xs">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-rose-500/15 flex items-center justify-center shrink-0 text-rose-600">
-                          <XCircle className="w-4 h-4" />
+                        <div className="w-8 h-8 rounded-full bg-blue-500/15 flex items-center justify-center shrink-0 text-brand-blue">
+                          <School className="w-4 h-4 text-brand-blue" />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[13.5px] font-bold text-gray-900 truncate">
                               {searchResult.collegeName}
                             </span>
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-600 text-white">
-                              Not Available
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500 text-white">
+                              Not Available Yet
                             </span>
                           </div>
-                          <p className="text-[12px] text-rose-800 mt-0.5">
-                            Campus Buddy is currently available at <strong>{AVAILABLE_CAMPUS}</strong> only.
+                          <p className="text-[12px] text-slate-600 mt-0.5">
+                            Be the 1st to bring Campus Buddy to your college!
                           </p>
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAmbassadorCollege(searchResult.collegeName);
+                          setShowAmbassadorModal(true);
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-brand-blue hover:bg-blue-600 text-white text-[11.5px] font-bold shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
+                      >
+                        Become Ambassador →
+                      </button>
                     </div>
                   )}
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Popular Items Row matching screenshot */}
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
-              <span className="font-semibold text-brand-dark">Popular:</span>
-              {['Engineering Drafter', 'Casio Calc', 'Hostel Kettle', 'Lab Goggles'].map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => {
-                    setInputValue('SVIET Chandigarh');
-                    handlePerformSearch('SVIET Chandigarh');
-                  }}
-                  className="px-2.5 py-1 rounded-full bg-gray-50 hover:bg-blue-50 text-gray-600 hover:text-brand-blue border border-gray-100 transition-colors cursor-pointer"
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
 
           </motion.div>
 
         </div>
       </div>
+
+      {/* CAMPUS AMBASSADOR POPUP MODAL (Horizontal Rectangular Frosted Glass Card) */}
+      <AnimatePresence>
+        {showAmbassadorModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowAmbassadorModal(false)}
+              className="absolute inset-0 bg-slate-950/50 backdrop-blur-md"
+            />
+
+            {/* Fixed Horizontal Rectangular Frosted Glass Card (Non-scrollable, No scrollbars) */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-[780px] max-h-[90vh] overflow-y-auto rounded-[24px] sm:rounded-[32px] p-5 sm:p-7 z-10 overflow-x-hidden bg-white/75 backdrop-blur-3xl border border-brand-blue/30 shadow-[0_30px_80px_-15px_rgba(8,96,232,0.25),inset_0_0_28px_2px_rgba(8,96,232,0.25),inset_0_1px_2px_rgba(255,255,255,0.95)]"
+            >
+              {/* Brand Blue Color Gradient Orbs Matching Button Colour */}
+              {/* 1. Top-Right Soft Blue Diffusion */}
+              <div className="absolute -top-12 -right-12 w-80 h-80 bg-gradient-to-bl from-brand-blue/45 via-brand-blue/20 to-transparent rounded-full blur-3xl pointer-events-none -z-10" />
+              
+              {/* 2. Bottom-Left Vibrant Blue Patch */}
+              <div className="absolute -bottom-10 -left-10 w-64 h-64 bg-gradient-to-tr from-brand-blue/50 via-blue-600/30 to-transparent rounded-full blur-2xl pointer-events-none -z-10" />
+
+              {/* 3. Center-Left Bright White Reflection Highlight */}
+              <div className="absolute top-2 left-10 w-72 h-44 bg-white/80 rounded-full blur-2xl pointer-events-none -z-10" />
+
+              {/* 4. Bottom-Right Subtle Brand Blue Glow */}
+              <div className="absolute -bottom-14 -right-14 w-52 h-52 bg-brand-blue/25 rounded-full blur-2xl pointer-events-none -z-10" />
+
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setShowAmbassadorModal(false)}
+                className="absolute top-4 right-4 sm:top-5 sm:right-5 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-slate-500 hover:text-slate-800 border border-brand-blue/25 shadow-xs flex items-center justify-center transition-all cursor-pointer z-20"
+                aria-label="Close modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* Horizontal 2-Column Grid Layout */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                
+                {/* Left Column: Heading, Subtitle & Application Form */}
+                <div className="md:col-span-6 flex flex-col justify-between">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-blue/10 border border-brand-blue/20 text-brand-blue text-[11px] font-bold uppercase tracking-wider mb-2.5">
+                      <GraduationCap className="w-3.5 h-3.5 text-brand-blue" />
+                      <span>Campus Ambassador</span>
+                    </div>
+
+                    <h3 className="text-[20px] sm:text-[23px] font-black text-slate-900 leading-tight">
+                      Become the 1st at{' '}
+                      <span className="text-brand-blue">{ambassadorCollege || 'Your College'}</span>!
+                    </h3>
+                    <p className="mt-1.5 text-[12.5px] text-slate-500 leading-relaxed">
+                      Campus Buddy hasn't launched at your college yet. Step up as our official Campus Ambassador and lead the movement!
+                    </p>
+                  </div>
+
+                  {/* Form / Success State */}
+                  {!applicationSubmitted ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        setApplicationSubmitted(true);
+                      }}
+                      className="mt-4 pt-3.5 border-t border-slate-200/60 flex flex-col gap-2.5"
+                    >
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          required
+                          placeholder="Your Name"
+                          className="px-3 py-2 rounded-xl border border-slate-200/80 bg-white/90 text-[12px] focus:outline-none focus:border-brand-blue text-slate-900 placeholder:text-gray-400"
+                        />
+                        <input
+                          type="tel"
+                          required
+                          placeholder="WhatsApp No."
+                          className="px-3 py-2 rounded-xl border border-slate-200/80 bg-white/90 text-[12px] focus:outline-none focus:border-brand-blue text-slate-900 placeholder:text-gray-400"
+                        />
+                      </div>
+                      <input
+                        type="email"
+                        required
+                        placeholder="College or Personal Email"
+                        className="px-3 py-2 rounded-xl border border-slate-200/80 bg-white/90 text-[12px] focus:outline-none focus:border-brand-blue text-slate-900 placeholder:text-gray-400"
+                      />
+
+                      <button
+                        type="submit"
+                        className="w-full py-2.5 rounded-xl bg-brand-blue hover:bg-blue-600 text-white font-bold text-[12.5px] shadow-[0_6px_20px_rgba(8,96,232,0.3)] transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2 mt-0.5"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Apply as Ambassador</span>
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="mt-4 p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200/90 text-center">
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-1.5">
+                        <CheckCircle2 className="w-4 h-4" />
+                      </div>
+                      <h4 className="text-[13.5px] font-extrabold text-emerald-900">Application Received!</h4>
+                      <p className="text-[11.5px] text-emerald-700 mt-0.5 leading-snug">
+                        Our team will reach out via WhatsApp shortly to launch Campus Buddy at {ambassadorCollege || 'your college'}.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowAmbassadorModal(false)}
+                        className="mt-2.5 px-3.5 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column: Concise Benefit Points (Clean, no text clutter) */}
+                <div className="md:col-span-6 space-y-2">
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                    Ambassador Benefits
+                  </div>
+                  {[
+                    {
+                      icon: <Award className="w-4 h-4 text-brand-blue" />,
+                      title: 'Official Certificate & LOR',
+                      desc: 'Signed credentials to boost your resume.'
+                    },
+                    {
+                      icon: <Coins className="w-4 h-4 text-emerald-600" />,
+                      title: 'Performance Stipends & Cash Rewards',
+                      desc: 'Weekly payouts & milestone cash bonuses.'
+                    },
+                    {
+                      icon: <Rocket className="w-4 h-4 text-brand-orange" />,
+                      title: 'Direct Founder Mentorship',
+                      desc: '1-on-1 sessions on growth & leadership.'
+                    },
+                    {
+                      icon: <Gift className="w-4 h-4 text-indigo-600" />,
+                      title: 'Exclusive Swag & Merch Kit',
+                      desc: 'Official hoodies, t-shirts & swag pack.'
+                    },
+                    {
+                      icon: <Users className="w-4 h-4 text-purple-600" />,
+                      title: 'Lead Your College Community',
+                      desc: 'Host student meetups & campus drives.'
+                    }
+                  ].map((b, bIdx) => (
+                    <div
+                      key={bIdx}
+                      className="p-2 sm:p-2.5 rounded-2xl bg-white/70 backdrop-blur-md border border-white/90 shadow-[0_2px_8px_rgba(0,0,0,0.03)] flex items-center gap-2.5 text-left transition-all hover:bg-white/90"
+                    >
+                      <div className="w-7 h-7 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-center shrink-0 shadow-2xs">
+                        {b.icon}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h5 className="text-[12px] font-bold text-slate-900 leading-tight truncate">
+                          {b.title}
+                        </h5>
+                        <p className="text-[11px] text-slate-500 leading-tight mt-0.5 truncate">
+                          {b.desc}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </section>
   );
 };
-
 

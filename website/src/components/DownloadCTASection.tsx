@@ -1,105 +1,191 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Download, Sparkles, CheckCircle2, QrCode } from 'lucide-react';
-import { HeroDoodle } from './Doodles';
+import { Download, CheckCircle2, QrCode } from 'lucide-react';
 
 interface DownloadCTASectionProps {
   onOpenDownloadModal?: () => void;
 }
 
 export const DownloadCTASection: React.FC<DownloadCTASectionProps> = ({ onOpenDownloadModal }) => {
-  const handleDirectDownload = () => {
+  const [clickedBtn, setClickedBtn] = useState<string | null>(null);
+
+  const handleDirectDownload = (btnKey?: string) => {
+    if (btnKey) {
+      setClickedBtn(btnKey);
+      setTimeout(() => setClickedBtn(null), 500);
+    }
     if (onOpenDownloadModal) {
       onOpenDownloadModal();
     } else {
-      // Trigger download or fallback
       window.open('/campusbuddy.apk', '_blank');
     }
   };
 
   return (
-    <section id="download" className="py-20 sm:py-28 bg-white relative overflow-hidden">
+    <section id="download" className="py-20 sm:py-28 bg-[#FFFFFF] relative overflow-hidden">
       <div className="max-w-6xl mx-auto px-5 sm:px-8">
-        <div className="relative rounded-[36px] bg-gradient-to-br from-brand-btnDark via-[#1E232E] to-[#12151B] text-white p-8 sm:p-16 overflow-hidden shadow-2xl">
-          
-          {/* Subtle decorative glow circles */}
-          <div className="absolute top-0 right-1/4 w-[380px] h-[380px] bg-brand-blue/20 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-10 left-10 w-[300px] h-[300px] bg-brand-orange/15 rounded-full blur-3xl pointer-events-none" />
+        
+        {/* Glassmorphic White Container - All shades strictly contained inside */}
+        <div
+          className="relative rounded-[24px] sm:rounded-[36px] text-brand-dark p-5 sm:p-16 overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.65) 50%, rgba(248, 250, 255, 0.55) 100%)',
+            backdropFilter: 'blur(32px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(32px) saturate(180%)',
+            border: '1.5px solid rgba(255, 255, 255, 0.95)',
+            boxShadow: `
+              0 25px 60px -15px rgba(15, 23, 42, 0.12),
+              0 12px 28px -6px rgba(15, 23, 42, 0.08),
+              0 0 0 1px rgba(226, 232, 240, 0.85),
+              inset 0 1.5px 2px rgba(255, 255, 255, 0.95),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.5)
+            `
+          }}
+        >
+          {/* Top Edge Specular Reflection */}
+          <div className="absolute top-0 inset-x-8 h-[1.5px] bg-gradient-to-r from-transparent via-white to-transparent opacity-95 pointer-events-none" />
 
-          {/* Doodles */}
-          <div className="absolute top-6 right-8 w-12 pointer-events-none opacity-80">
-            <HeroDoodle />
-          </div>
+          {/* 1. Warm Orange Shade - Moved inside the padding (does not spill outside) */}
+          <div
+            className="absolute top-2 sm:top-6 left-[50%] sm:left-[54%] -translate-x-1/2 w-[300px] sm:w-[420px] h-[160px] sm:h-[220px] rounded-full blur-[60px] sm:blur-[75px] pointer-events-none -z-10"
+            style={{
+              background: 'radial-gradient(ellipse at center, rgba(255, 135, 75, 0.60) 0%, rgba(255, 107, 44, 0.45) 45%, rgba(245, 158, 11, 0.20) 75%, transparent 100%)'
+            }}
+          />
+
+          {/* 2. Rich Website Brand Blue (#0860E8) Shade in the bottom-right corner of the padding */}
+          <div
+            className="absolute -bottom-6 -right-6 w-[280px] sm:w-[380px] h-[220px] sm:h-[300px] rounded-full blur-[65px] sm:blur-[80px] pointer-events-none -z-10"
+            style={{
+              background: 'radial-gradient(ellipse at center, rgba(8, 96, 232, 0.60) 0%, rgba(2, 132, 199, 0.42) 45%, rgba(56, 189, 248, 0.22) 75%, transparent 100%)'
+            }}
+          />
+
+          {/* 3. Top-Left Website Brand Blue Wash */}
+          <div className="absolute -top-10 -left-10 w-[320px] sm:w-[400px] h-[280px] sm:h-[340px] bg-gradient-to-br from-[#0860E8]/28 via-[#0860E8]/12 to-transparent rounded-full blur-[70px] pointer-events-none -z-10" />
+
+          {/* 4. Soft Bottom-Left Rose/Pink Accent */}
+          <div className="absolute -bottom-6 left-10 sm:left-16 w-[200px] sm:w-[240px] h-[180px] sm:h-[220px] bg-gradient-to-tr from-[#EC4899]/20 to-transparent rounded-full blur-[60px] pointer-events-none -z-10" />
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
             
             {/* Left Column: Headlines & CTA Buttons */}
             <div className="lg:col-span-7 flex flex-col items-start">
               
-              <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[11.5px] font-semibold text-brand-lightLine mb-5">
-                <Sparkles className="w-3.5 h-3.5 text-brand-orange" />
-                <span>Download Campus Buddy v1.0</span>
-              </div>
-
-              <h2 className="text-[32px] sm:text-[46px] font-extrabold text-white leading-[1.12] tracking-tight">
+              <h2 className="text-[26px] sm:text-[46px] font-extrabold text-brand-dark leading-[1.12] tracking-tight">
                 Your Campus.<br />
                 Your Community.<br />
-                <span className="text-brand-lightLine">Your Buddy.</span>
+                <span className="text-brand-blue">Your Buddy.</span>
               </h2>
 
-              <p className="mt-4 text-white/80 text-[14px] sm:text-[15.5px] leading-relaxed max-w-lg">
+              <p className="mt-4 text-brand-secondary text-[14px] sm:text-[15.5px] leading-relaxed max-w-lg">
                 Discover affordable essentials, pass on what you no longer need, and make campus life a little easier with Campus Buddy. Get started in minutes with your student ID.
               </p>
 
-              {/* Download Buttons Group */}
-              <div className="mt-8 flex flex-wrap items-center gap-3.5 sm:gap-4">
+              {/* Download Buttons Group with Upward Flip Animation */}
+              <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
                 {/* Primary Android APK Download Button */}
                 <button
-                  onClick={handleDirectDownload}
-                  className="px-7 py-3.5 bg-brand-blue hover:bg-blue-600 text-white text-[13.5px] font-bold rounded-full shadow-[0_8px_25px_rgba(8,96,232,0.4)] hover:-translate-y-0.5 active:scale-98 transition-all flex items-center gap-2.5 cursor-pointer"
+                  onClick={() => handleDirectDownload('android')}
+                  className="group relative px-7 py-3.5 bg-brand-blue hover:bg-blue-600 text-white text-[13.5px] font-bold rounded-full shadow-[0_8px_25px_rgba(8,96,232,0.35)] hover:shadow-[0_12px_32px_rgba(8,96,232,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden cursor-pointer select-none"
                 >
-                  <Download className="w-4 h-4 text-white" />
-                  <span>Download for Android (.APK)</span>
+                  <span className="relative inline-flex flex-col h-[1.35em] overflow-hidden pointer-events-none">
+                    <span
+                      className={`inline-flex items-center gap-2.5 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-full group-active:-translate-y-full ${
+                        clickedBtn === 'android' ? '-translate-y-full' : ''
+                      }`}
+                    >
+                      <Download className="w-4 h-4 text-white shrink-0" />
+                      <span>Download for Android (.apk)</span>
+                    </span>
+                    <span
+                      className={`absolute top-full left-0 inline-flex items-center gap-2.5 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-full group-active:-translate-y-full ${
+                        clickedBtn === 'android' ? '-translate-y-full' : ''
+                      }`}
+                      aria-hidden="true"
+                    >
+                      <Download className="w-4 h-4 text-white shrink-0" />
+                      <span>Download for Android (.apk)</span>
+                    </span>
+                  </span>
                 </button>
 
                 {/* Google Play Store Badge Button */}
                 <button
-                  onClick={handleDirectDownload}
-                  className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-[13px] font-semibold rounded-full backdrop-blur-md transition-all flex items-center gap-2 cursor-pointer"
+                  onClick={() => handleDirectDownload('play')}
+                  className="group relative px-6 py-3.5 bg-white/95 hover:bg-white text-brand-dark border border-gray-200/90 hover:border-gray-300 text-[13px] font-bold rounded-full shadow-2xs hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-95 backdrop-blur-md transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden cursor-pointer select-none"
                 >
-                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                    <path d="M3.609 1.814L13.793 12 3.61 22.186c-.347-.373-.55-.898-.55-1.503V3.317c0-.605.203-1.13.55-1.503zm11.234 11.236l2.12 2.12-11.45 6.47 9.33-8.59zm0-2.1L5.513 2.36l11.45 6.47-2.12 2.12zm1.464 1.05l4.57 2.58c.72.41.72 1.08 0 1.49l-4.57 2.58-1.78-1.78 1.78-1.78-.001-.001-.001-.001.002-.089z" />
-                  </svg>
-                  <span>Google Play</span>
+                  <span className="relative inline-flex flex-col h-[1.35em] overflow-hidden pointer-events-none">
+                    <span
+                      className={`inline-flex items-center gap-2 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-full group-active:-translate-y-full ${
+                        clickedBtn === 'play' ? '-translate-y-full' : ''
+                      }`}
+                    >
+                      <svg viewBox="0 0 32 32" className="w-4 h-4 fill-current shrink-0">
+                        <path d="M17.929 17.32l-13.746 13.662c0.067 0.009 0.144 0.014 0.223 0.014 0.335 0 0.648-0.090 0.918-0.247l-0.009 0.005 16.65-9.422zM17.929 14.737l4.071-4.046-16.685-9.442c-0.262-0.153-0.577-0.244-0.913-0.244-0.095 0-0.188 0.007-0.28 0.021l0.010-0.001zM2.675 2.159c-0.089 0.209-0.14 0.452-0.14 0.707 0 0.001 0 0.002 0 0.003v-0 26.264c0 0.002 0 0.003 0 0.005 0 0.269 0.057 0.525 0.16 0.756l-0.005-0.012 13.94-13.855zM28.519 17.622l-4.897 2.772-4.393-4.365 4.427-4.4 4.862 2.752c0.569 0.326 0.945 0.929 0.945 1.621s-0.377 1.295-0.936 1.616l-0.009 0.005z" />
+                      </svg>
+                      <span>Google Play</span>
+                    </span>
+                    <span
+                      className={`absolute top-full left-0 inline-flex items-center gap-2 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-full group-active:-translate-y-full ${
+                        clickedBtn === 'play' ? '-translate-y-full' : ''
+                      }`}
+                      aria-hidden="true"
+                    >
+                      <svg viewBox="0 0 32 32" className="w-4 h-4 fill-current shrink-0">
+                        <path d="M17.929 17.32l-13.746 13.662c0.067 0.009 0.144 0.014 0.223 0.014 0.335 0 0.648-0.090 0.918-0.247l-0.009 0.005 16.65-9.422zM17.929 14.737l4.071-4.046-16.685-9.442c-0.262-0.153-0.577-0.244-0.913-0.244-0.095 0-0.188 0.007-0.28 0.021l0.010-0.001zM2.675 2.159c-0.089 0.209-0.14 0.452-0.14 0.707 0 0.001 0 0.002 0 0.003v-0 26.264c0 0.002 0 0.003 0 0.005 0 0.269 0.057 0.525 0.16 0.756l-0.005-0.012 13.94-13.855zM28.519 17.622l-4.897 2.772-4.393-4.365 4.427-4.4 4.862 2.752c0.569 0.326 0.945 0.929 0.945 1.621s-0.377 1.295-0.936 1.616l-0.009 0.005z" />
+                      </svg>
+                      <span>Google Play</span>
+                    </span>
+                  </span>
                 </button>
 
                 {/* Apple App Store */}
                 <button
-                  onClick={handleDirectDownload}
-                  className="px-5 py-3 bg-white/10 hover:bg-white/20 text-white/90 border border-white/15 text-[12.5px] font-medium rounded-full backdrop-blur-md transition-all flex items-center gap-2 cursor-pointer"
+                  onClick={() => handleDirectDownload('ios')}
+                  className="group relative px-5 py-3.5 bg-white/95 hover:bg-white text-brand-dark border border-gray-200/90 hover:border-gray-300 text-[12.5px] font-semibold rounded-full shadow-2xs hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-95 backdrop-blur-md transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden cursor-pointer select-none"
                 >
-                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.38c.62-.75 1.04-1.8 0.92-2.85-.9.04-2 .6-2.65 1.35-.58.67-1.09 1.74-.95 2.77 1 .08 2.05-.52 2.68-1.27z"/>
-                  </svg>
-                  <span>iOS App (Web)</span>
+                  <span className="relative inline-flex flex-col h-[1.35em] overflow-hidden pointer-events-none">
+                    <span
+                      className={`inline-flex items-center gap-2 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-full group-active:-translate-y-full ${
+                        clickedBtn === 'ios' ? '-translate-y-full' : ''
+                      }`}
+                    >
+                      <svg viewBox="0 0 384 512" className="w-3.5 h-3.5 fill-current shrink-0">
+                        <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z" />
+                      </svg>
+                      <span>App Store</span>
+                    </span>
+                    <span
+                      className={`absolute top-full left-0 inline-flex items-center gap-2 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-full group-active:-translate-y-full ${
+                        clickedBtn === 'ios' ? '-translate-y-full' : ''
+                      }`}
+                      aria-hidden="true"
+                    >
+                      <svg viewBox="0 0 384 512" className="w-3.5 h-3.5 fill-current shrink-0">
+                        <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z" />
+                      </svg>
+                      <span>App Store</span>
+                    </span>
+                  </span>
                 </button>
               </div>
 
               {/* Reassurance points */}
-              <div className="mt-8 flex flex-wrap items-center gap-4 text-[12px] text-white/70">
+              <div className="mt-6 sm:mt-8 flex flex-wrap items-center gap-3 sm:gap-4 text-[11.5px] sm:text-[12.5px] font-semibold text-brand-secondary">
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Free Download
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Free Download</span>
                 </span>
-                <span>•</span>
+                <span className="text-gray-300">•</span>
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-brand-lightLine" />
-                  Verified College Community
+                  <CheckCircle2 className="w-4 h-4 text-brand-blue" />
+                  <span>Verified College Community</span>
                 </span>
-                <span>•</span>
+                <span className="text-gray-300">•</span>
                 <span className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-brand-orange" />
-                  0% Commission
+                  <span>0% Commission</span>
                 </span>
               </div>
 
@@ -112,10 +198,10 @@ export const DownloadCTASection: React.FC<DownloadCTASectionProps> = ({ onOpenDo
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.6 }}
-                className="w-full max-w-[290px] p-6 rounded-3xl bg-white text-brand-dark shadow-2xl flex flex-col items-center text-center border-4 border-white/20"
+                className="w-full max-w-[290px] p-6 rounded-3xl bg-white/90 backdrop-blur-md text-brand-dark shadow-[0_20px_50px_rgba(8,96,232,0.12)] flex flex-col items-center text-center border-2 border-white"
               >
                 {/* QR Code Container */}
-                <div className="p-3 bg-white rounded-2xl border-2 border-dashed border-gray-200 shadow-inner">
+                <div className="p-3 bg-white rounded-2xl border-2 border-dashed border-gray-200/90 shadow-2xs">
                   {/* High Quality Scalable SVG QR Code */}
                   <svg
                     viewBox="0 0 160 160"
@@ -201,7 +287,7 @@ export const DownloadCTASection: React.FC<DownloadCTASectionProps> = ({ onOpenDo
                     <QrCode className="w-3.5 h-3.5 text-brand-blue" />
                     <span>Scan to Install on Mobile</span>
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-0.5">
+                  <p className="text-[10px] text-gray-500 mt-0.5">
                     Point your phone camera to download directly
                   </p>
                 </div>

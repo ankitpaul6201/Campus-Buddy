@@ -45,27 +45,27 @@ const CountUpNumber: React.FC<CountUpProps> = ({ end, duration = 1.8, isDecimal 
 
 export const StatsBand: React.FC = () => {
   return (
-    <section className="w-full bg-[#0860E8] py-8 sm:py-10 text-white relative z-20">
-      <div className="max-w-6xl mx-auto px-5 sm:px-8">
+    <section className="w-full max-w-full overflow-hidden bg-[#0860E8] py-7 sm:py-10 text-white relative z-20">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 items-center divide-y md:divide-y-0 md:divide-x divide-white/20"
+          className="grid grid-cols-2 md:grid-cols-4 gap-5 sm:gap-8 items-center md:divide-x divide-white/20"
         >
           {STATS.map((stat, idx) => (
             <div
               key={idx}
               className={`flex flex-col items-center md:items-start text-center md:text-left ${
-                idx !== 0 ? 'pt-4 md:pt-0 md:pl-8' : ''
-              }`}
+                idx >= 2 ? 'pt-4 border-t border-white/20 md:border-t-0 md:pt-0' : ''
+              } ${idx !== 0 ? 'md:pl-8' : ''}`}
             >
-              <div className="text-[32px] sm:text-[40px] font-extrabold tracking-tight leading-tight flex items-baseline">
+              <div className="text-[28px] sm:text-[40px] font-extrabold tracking-tight leading-tight flex items-baseline">
                 <CountUpNumber end={stat.value} isDecimal={stat.isDecimal} />
                 <span className="ml-0.5">{stat.suffix}</span>
               </div>
-              <p className="text-[12px] sm:text-[13px] text-white/80 font-normal tracking-wide mt-0.5">
+              <p className="text-[11.5px] sm:text-[13px] text-white/80 font-normal tracking-wide mt-0.5">
                 {stat.label}
               </p>
             </div>

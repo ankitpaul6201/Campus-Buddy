@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
 import { FAQS } from '../data/mockData';
-import { OrangeBurstDoodle, FaqThreadDoodle } from './Doodles';
 
 export const FAQSection: React.FC = () => {
   const [openId, setOpenId] = useState<string | null>('faq1');
@@ -31,23 +30,13 @@ export const FAQSection: React.FC = () => {
 
   return (
     <section id="faqs" className="py-20 sm:py-28 bg-[#FFFFFF] relative overflow-hidden">
-      {/* Decorative hand-drawn light blue thread on bottom left */}
-      <div className="absolute -bottom-10 -left-10 w-[260px] pointer-events-none opacity-60 z-0">
-        <FaqThreadDoodle />
-      </div>
-
       <div className="max-w-6xl mx-auto px-5 sm:px-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-14 lg:gap-10 items-start">
           
           {/* Left Column: Heading, description, and Email Subscribe Pill */}
           <div className="lg:col-span-5 flex flex-col items-start">
             <div className="relative mb-3">
-              {/* Orange Doodle top right */}
-              <div className="absolute -top-7 right-0 w-9 pointer-events-none">
-                <OrangeBurstDoodle />
-              </div>
-
-              <h2 className="text-[32px] sm:text-[38px] font-extrabold text-brand-dark leading-[1.18] tracking-tight">
+              <h2 className="text-[26px] sm:text-[38px] font-extrabold text-brand-dark leading-[1.18] tracking-tight">
                 Got A Question<br />
                 About Campus Buddy?
               </h2>

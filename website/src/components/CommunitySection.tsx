@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { OrangeBurstDoodle, CurvedThreadDoodle } from './Doodles';
-import { MessageCircle, CheckCircle2 } from 'lucide-react';
+import { FlipButton } from './ui/Button';
 
 interface CommunitySectionProps {
   onJoin: () => void;
@@ -10,29 +9,19 @@ interface CommunitySectionProps {
 export const CommunitySection: React.FC<CommunitySectionProps> = ({ onJoin }) => {
   return (
     <section id="community" className="py-20 sm:py-28 bg-[#FFFFFF] relative overflow-hidden">
-      {/* Decorative hand-drawn looping thread under the section */}
-      <div className="absolute -bottom-16 left-1/3 w-[450px] pointer-events-none opacity-60 z-0">
-        <CurvedThreadDoodle />
-      </div>
-
       <div className="max-w-6xl mx-auto px-5 sm:px-8 relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-14 lg:gap-10 items-center">
-          
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+
           {/* Left Column: Heading, description, CTA */}
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="lg:col-span-6 flex flex-col items-start"
+            className="lg:col-span-5 flex flex-col items-start"
           >
             <div className="relative mb-3">
-              {/* Orange accent doodle beside headline */}
-              <div className="absolute -top-7 right-0 sm:-right-4 w-9 pointer-events-none">
-                <OrangeBurstDoodle />
-              </div>
-
-              <h2 className="text-[32px] sm:text-[40px] font-extrabold text-brand-dark leading-[1.15] tracking-tight">
+              <h2 className="text-[26px] sm:text-[40px] font-extrabold text-brand-dark leading-[1.15] tracking-tight">
                 Campus Life Is Better<br />
                 When We Connect!
               </h2>
@@ -43,192 +32,292 @@ export const CommunitySection: React.FC<CommunitySectionProps> = ({ onJoin }) =>
               everyday college life a little easier.
             </p>
 
-            <button
-              onClick={onJoin}
-              className="mt-8 px-7 py-3 bg-brand-btnDark hover:bg-black text-white text-[13.5px] font-semibold rounded-full shadow-[0_6px_20px_rgba(25,29,37,0.18)] hover:-translate-y-0.5 active:scale-98 transition-all duration-200 cursor-pointer"
-            >
-              Join Campus Buddy
-            </button>
+            <div className="mt-8">
+              <FlipButton
+                variant="dark"
+                onClick={onJoin}
+                className="px-8 py-3.5"
+              >
+                Join Campus Buddy
+              </FlipButton>
+            </div>
           </motion.div>
 
-          {/* Right Column: Playful Community Avatar Composition matching screenshot */}
-          <div className="lg:col-span-6 flex justify-center">
-            <div className="relative w-[340px] sm:w-[400px] h-[360px] sm:h-[400px] flex items-center justify-center select-none">
-              
-              {/* Pale Blue Soft Cloud Shape Background */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.85 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.7 }}
-                className="absolute inset-4 bg-gradient-to-tr from-[#E6F3FE] via-[#F0F7FF] to-[#D9ECFD] rounded-[60px] -z-10 shadow-[0_12px_40px_rgba(8,96,232,0.08)]"
+          {/* Right Column: Visual College Hub & Connected Student Network (Image 1 Style with Flowing Line Animation) */}
+          <div className="lg:col-span-7 flex justify-center">
+            <div className="relative w-full max-w-[340px] sm:max-w-[500px] aspect-square flex items-center justify-center select-none mx-auto">
+
+              {/* Dotted Grid Matrix with Blurred/Feathered Radial Mask Blending Seamlessly into White Background */}
+              <div
+                className="absolute inset-0 pointer-events-none opacity-50"
+                style={{
+                  backgroundImage: 'radial-gradient(#94A3B8 1.25px, transparent 1.25px)',
+                  backgroundSize: '24px 24px',
+                  backgroundPosition: '12px 12px',
+                  maskImage: 'radial-gradient(ellipse 65% 65% at 50% 50%, black 35%, transparent 72%)',
+                  WebkitMaskImage: 'radial-gradient(ellipse 65% 65% at 50% 50%, black 35%, transparent 72%)'
+                }}
               />
 
-              {/* Central Large Student Avatar */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.5 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.2 }}
-                className="relative z-20 w-24 h-24 sm:w-28 sm:h-28 rounded-full p-1 bg-white shadow-xl"
+              {/* Soft Center Radial Brand Blue Glow */}
+              <div className="absolute w-72 h-72 rounded-full bg-brand-blue/5 blur-3xl pointer-events-none" />
+
+              {/* SVG Network Connector Lines with Flowing Animation */}
+              <svg
+                className="absolute inset-0 w-full h-full pointer-events-none z-10"
+                viewBox="0 0 500 500"
+                fill="none"
               >
-                <img
-                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"
-                  alt="Student Community Lead"
-                  className="w-full h-full rounded-full object-cover"
-                />
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-brand-blue border-2 border-white flex items-center justify-center text-white">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
+                <defs>
+                  {/* Flowing Pulse Gradient */}
+                  <linearGradient id="flowPulse" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#0860E8" stopOpacity="0.2" />
+                    <stop offset="50%" stopColor="#0860E8" stopOpacity="1" />
+                    <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.9" />
+                  </linearGradient>
+                </defs>
+
+                <style>{`
+                  @keyframes flowLineLong {
+                    0% { stroke-dashoffset: 52; }
+                    100% { stroke-dashoffset: -220; }
+                  }
+                  @keyframes flowLineMed {
+                    0% { stroke-dashoffset: 44; }
+                    100% { stroke-dashoffset: -180; }
+                  }
+                  @keyframes flowLineShort {
+                    0% { stroke-dashoffset: 32; }
+                    100% { stroke-dashoffset: -110; }
+                  }
+                  .animate-flow-long {
+                    animation: flowLineLong 2.5s linear infinite;
+                  }
+                  .animate-flow-med {
+                    animation: flowLineMed 2.1s linear infinite;
+                  }
+                  .animate-flow-short {
+                    animation: flowLineShort 1.6s linear infinite;
+                  }
+                `}</style>
+
+                {/* 6 Circuit Connection Paths - Single Long Line Enters, Travels & Exits */}
+                {[
+                  // 1. Center Top to Top-Left Node (Casio fx-991CW) - Long curve (~193px)
+                  {
+                    d: 'M 230 204 V 120 Q 230 100 210 100 H 132',
+                    dash: '52 220',
+                    animClass: 'animate-flow-long',
+                    delay: '0s'
+                  },
+                  // 2. Center Top to Top-Right Node (Python Peer) - Med curve (~125px)
+                  {
+                    d: 'M 270 204 V 155 Q 270 140 290 140 H 320 Q 340 140 340 132',
+                    dash: '44 180',
+                    animClass: 'animate-flow-med',
+                    delay: '0.4s'
+                  },
+                  // 3. Center Left to Middle-Left Node (Join Us) - Short straight (72px)
+                  {
+                    d: 'M 204 250 H 132',
+                    dash: '32 110',
+                    animClass: 'animate-flow-short',
+                    delay: '0.8s'
+                  },
+                  // 4. Center Right to Middle-Right Node (Fest Photos) - Short straight (72px)
+                  {
+                    d: 'M 296 250 H 378',
+                    dash: '32 110',
+                    animClass: 'animate-flow-short',
+                    delay: '1.2s'
+                  },
+                  // 5. Center Bottom to Bottom-Left Node (DBMS Notes Deal) - Long curve (~193px)
+                  {
+                    d: 'M 230 296 V 380 Q 230 400 210 400 H 132',
+                    dash: '52 220',
+                    animClass: 'animate-flow-long',
+                    delay: '0.6s'
+                  },
+                  // 6. Center Bottom to Bottom-Right Node (Verified Peer) - Med curve (~153px)
+                  {
+                    d: 'M 270 296 V 360 Q 270 380 290 380 H 348',
+                    dash: '44 180',
+                    animClass: 'animate-flow-med',
+                    delay: '1.0s'
+                  }
+                ].map((pathObj, idx) => (
+                  <g key={idx}>
+                    {/* Base Static Circuit Track */}
+                    <path
+                      d={pathObj.d}
+                      stroke="#E2E8F0"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+
+                    {/* Soft Light-Blue Glow Trail */}
+                    <path
+                      d={pathObj.d}
+                      stroke="#38BDF8"
+                      strokeWidth="5.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeDasharray={pathObj.dash}
+                      className={pathObj.animClass}
+                      style={{
+                        animationDelay: pathObj.delay,
+                        opacity: 0.3
+                      }}
+                    />
+
+                    {/* Single Traveling Core Beam (Solid brand-blue #0860E8) */}
+                    <path
+                      d={pathObj.d}
+                      stroke="#0860E8"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeDasharray={pathObj.dash}
+                      className={pathObj.animClass}
+                      style={{ animationDelay: pathObj.delay }}
+                    />
+                  </g>
+                ))}
+              </svg>
+
+              {/* ---------------- CENTER: COLLEGE BUILDING HUB (Dead-Center at 250,250) ---------------- */}
+              <div
+                className="absolute z-30 pointer-events-auto"
+                style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ type: 'spring', damping: 20, stiffness: 240, delay: 0.15 }}
+                  className="relative flex items-center justify-center"
+                >
+                  {/* Ambient glow behind center card */}
+                  <div className="absolute inset-0 rounded-3xl bg-brand-blue/20 blur-xl animate-pulse -z-10" />
+
+                  {/* College Hub Card (92px x 92px matching Center Flow Coordinates 204..296) */}
+                  <div className="w-[92px] h-[92px] rounded-3xl bg-white border-2 border-brand-blue/35 shadow-[0_12px_32px_rgba(8,96,232,0.18)] p-2 flex flex-col items-center justify-center hover:scale-105 transition-transform duration-300">
+                    <img
+                      src="/sviet-college-icon.png"
+                      alt="Campus College Building"
+                      className="w-12 h-12 object-contain rounded-xl"
+                    />
+                    <span className="text-[10px] font-black text-brand-dark tracking-tight leading-tight mt-0.5">
+                      Campus Hub
+                    </span>
+                    <span className="text-[8px] font-extrabold text-brand-blue uppercase tracking-wider leading-none mt-0.5">
+                      Network
+                    </span>
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* ---------------- 6 OUTER CONNECTED STUDENT NODES (Accurately Centered at Path Endpoints) ---------------- */}
+              {[
+                {
+                  id: 1,
+                  left: '20%',
+                  top: '20%',
+                  avatar: '/avatars/student-1.jpg',
+                  name: 'Student Seller',
+                  badge: 'Casio fx-991CW • ₹650',
+                  badgePosition: '-top-6 left-1/2 -translate-x-1/2',
+                  badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                  dotColor: 'bg-emerald-500'
+                },
+                {
+                  id: 2,
+                  left: '68%',
+                  top: '20%',
+                  avatar: '/avatars/student-2.jpg',
+                  name: 'Student Coder',
+                  badge: 'Python Peer • ₹99/hr',
+                  badgePosition: '-top-6 left-1/2 -translate-x-1/2',
+                  badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
+                  dotColor: 'bg-sky-500'
+                },
+                {
+                  id: 3,
+                  left: '20%',
+                  top: '50%',
+                  avatar: '/avatars/student-3.jpg',
+                  name: 'Student Lead',
+                  badge: 'Drafter • ₹150',
+                  badgePosition: '-bottom-6 left-1/2 -translate-x-1/2',
+                  badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
+                  dotColor: 'bg-amber-500'
+                },
+                {
+                  id: 4,
+                  left: '82%',
+                  top: '50%',
+                  avatar: '/avatars/student-4.jpg',
+                  name: 'Student Creative',
+                  badge: 'Need Drafter',
+                  badgePosition: '-bottom-6 left-1/2 -translate-x-1/2',
+                  badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
+                  dotColor: 'bg-amber-500'
+                },
+                {
+                  id: 5,
+                  left: '20%',
+                  top: '80%',
+                  avatar: '/avatars/student-5.jpg',
+                  name: 'Student Peer',
+                  badge: 'Python Tutor Needed',
+                  badgePosition: '-bottom-6 left-1/2 -translate-x-1/2',
+                  badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
+                  dotColor: 'bg-sky-500'
+                },
+                {
+                  id: 6,
+                  left: '76%',
+                  top: '76%',
+                  avatar: '/avatars/student-6.jpg',
+                  name: 'Verified Student',
+                  badge: 'Need Calculator',
+                  badgePosition: '-bottom-6 left-1/2 -translate-x-1/2',
+                  badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                  dotColor: 'bg-emerald-500'
+                }
+              ].map((node) => (
+                <div
+                  key={node.id}
+                  className="absolute z-20 group"
+                  style={{ left: node.left, top: node.top, transform: 'translate(-50%, -50%)' }}
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.7 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.12 * node.id, type: 'spring', damping: 20 }}
+                    className="relative flex items-center justify-center"
+                  >
+                    {/* Floating Speech/Status Badge */}
+                    <div
+                      className={`absolute ${node.badgePosition} whitespace-nowrap px-2.5 py-0.5 rounded-full text-[9.5px] font-bold border shadow-xs pointer-events-none transition-transform group-hover:scale-105 ${node.badgeColor} flex items-center gap-1.5`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${node.dotColor}`} />
+                      <span>{node.badge}</span>
+                    </div>
+
+                    {/* 64x64 Squircle Node Card matching Image 1 with Student Avatar */}
+                    <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200/90 shadow-md hover:shadow-xl hover:border-brand-blue/50 p-1 flex items-center justify-center transition-all duration-300 group-hover:scale-110 cursor-pointer">
+                      <img
+                        src={node.avatar}
+                        alt={node.name}
+                        className="w-full h-full object-cover rounded-xl"
+                      />
+                    </div>
+                  </motion.div>
                 </div>
-              </motion.div>
-
-              {/* Avatar 1: Top-Left */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.3, type: 'spring' }}
-                className="absolute top-6 left-6 w-14 h-14 rounded-full p-1 bg-white shadow-md z-10 float-slow"
-              >
-                <img
-                  src="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80"
-                  alt="Student 1"
-                  className="w-full h-full rounded-full object-cover"
-                />
-              </motion.div>
-
-              {/* Avatar 2: Top-Right */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.38, type: 'spring' }}
-                className="absolute top-10 right-8 w-13 h-13 rounded-full p-1 bg-white shadow-md z-10 float-slow-delay"
-              >
-                <img
-                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80"
-                  alt="Student 2"
-                  className="w-full h-full rounded-full object-cover"
-                />
-              </motion.div>
-
-              {/* Avatar 3: Bottom-Left */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.46, type: 'spring' }}
-                className="absolute bottom-6 left-10 w-14 h-14 rounded-full p-1 bg-white shadow-md z-10 float-slow-delay"
-              >
-                <img
-                  src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80"
-                  alt="Student 3"
-                  className="w-full h-full rounded-full object-cover"
-                />
-              </motion.div>
-
-              {/* Avatar 4: Bottom-Right */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.54, type: 'spring' }}
-                className="absolute bottom-10 right-14 w-12 h-12 rounded-full p-1 bg-white shadow-md z-10 float-slow"
-              >
-                <img
-                  src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80"
-                  alt="Student 4"
-                  className="w-full h-full rounded-full object-cover"
-                />
-              </motion.div>
-
-              {/* Avatar 5: Right Edge */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.62, type: 'spring' }}
-                className="absolute top-1/2 -right-2 -translate-y-1/2 w-11 h-11 rounded-full p-1 bg-white shadow-md z-10"
-              >
-                <img
-                  src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80"
-                  alt="Student 5"
-                  className="w-full h-full rounded-full object-cover"
-                />
-              </motion.div>
-
-              {/* Floating Speech Bubble 1: Top Right (Dark Pill matching screenshot) */}
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.8 }}
-                whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.6, type: 'spring' }}
-                className="absolute top-12 right-20 bg-brand-btnDark text-white px-3 py-1 rounded-full text-[10px] font-semibold shadow-lg z-30"
-              >
-                <span>Anyone selling DBMS notes?</span>
-              </motion.div>
-
-              {/* Floating Speech Bubble 2: Center-Left */}
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.8 }}
-                whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.72, type: 'spring' }}
-                className="absolute top-36 left-4 bg-brand-btnDark text-white px-3 py-1 rounded-full text-[10px] font-semibold shadow-lg z-30"
-              >
-                <span>Calculator available!</span>
-              </motion.div>
-
-              {/* Floating Speech Bubble 3: Bottom Right */}
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.8 }}
-                whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.84, type: 'spring' }}
-                className="absolute bottom-20 right-8 bg-brand-btnDark text-white px-3 py-1 rounded-full text-[10px] font-semibold shadow-lg z-30"
-              >
-                <span>Deal done! 🎉</span>
-              </motion.div>
-
-              {/* Floating Social Icons matching screenshot */}
-              {/* Twitter Bird Top */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.8, type: 'spring' }}
-                className="absolute top-4 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-[#1DA1F2] text-white flex items-center justify-center shadow-md z-30"
-              >
-                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                  <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/>
-                </svg>
-              </motion.div>
-
-              {/* Instagram Gradient Icon Left */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.9, type: 'spring' }}
-                className="absolute top-1/2 left-2 -translate-y-1/2 w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white flex items-center justify-center shadow-md z-30"
-              >
-                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 stroke-current stroke-2 fill-none">
-                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-                </svg>
-              </motion.div>
-
-              {/* TikTok / Chat Music Icon Bottom */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 1.0, type: 'spring' }}
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shadow-md z-30"
-              >
-                <MessageCircle className="w-4 h-4 text-[#9DD6FA]" />
-              </motion.div>
+              ))}
 
             </div>
           </div>
