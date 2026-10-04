@@ -16,16 +16,14 @@ const productSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['All Items', 'Books', 'Electronics', 'Dorm & Living', 'Clothing & Merch', 'Vehicles & Cycles', 'Sports & Hobbies'],
-    default: 'All Items'
+    default: 'Other'
   },
   condition: {
     type: String,
-    enum: ['Like New', 'Good', 'Fair'],
     default: 'Like New'
   },
   images: [{
-    type: String, // Cloudinary URLs
+    type: String, // Cloudinary URLs or photo URLs
     required: true
   }],
   seller: {
@@ -35,7 +33,15 @@ const productSchema = new mongoose.Schema({
   },
   campusName: {
     type: String,
-    default: 'Stanford Campus'
+    default: 'Campus Member'
+  },
+  universityName: {
+    type: String,
+    default: 'Campus Member'
+  },
+  location: {
+    type: String,
+    default: ''
   },
   status: {
     type: String,

@@ -34,7 +34,7 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
-import { uploadStudentId, apiUpdateProfile, apiUpdatePassword } from '../lib/api';
+import { uploadStudentId, apiUpdateProfile, apiUpdatePassword, formatRupeePrice } from '../lib/api';
 const defaultAvatar = '/avatar-blue-2.svg';
 
 // Campus Buddy Profile Screen with default avatar and student info
@@ -130,8 +130,8 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
   };
 
   const products = [
-    { id: 'card-1', title: 'Engineering Mathematics Vol 2', price: '$45', sellerName: 'Rahul', image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80' },
-    { id: 'card-2', title: 'TI-84 Plus CE Graphing Calculator', price: '$80', sellerName: 'Sarah', image: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48b?auto=format&fit=crop&w=600&q=80' }
+    { id: 'card-1', title: 'Engineering Mathematics Vol 2', price: '₹450', sellerName: 'Rahul', image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80' },
+    { id: 'card-2', title: 'TI-84 Plus CE Graphing Calculator', price: '₹800', sellerName: 'Sarah', image: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48b?auto=format&fit=crop&w=600&q=80' }
   ];
 
   const wishlistedProducts = products.filter(p => favorites.includes(p.id));
@@ -189,6 +189,16 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
 
   const menuItems = [
     {
+      id: 'student_info',
+      label: 'Student Information',
+      sublabel: user?.universityName || 'Campus & Academic Details',
+      icon: GraduationCap,
+      bgColor: 'bg-blue-500/15 text-[#1944F1]',
+      status: isUserVerified ? 'Verified' : 'Pending',
+      statusColor: isUserVerified ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200',
+      action: () => setActiveModal('student_info')
+    },
+    {
       id: 'purchases',
       label: 'Sales & Order History',
       sublabel: `${soldCount} items completed on campus`,
@@ -197,16 +207,6 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
       badge: `${soldCount} items`,
       badgeColor: 'bg-emerald-50 text-emerald-600 border-emerald-100',
       action: () => setActiveModal('purchases')
-    },
-    {
-      id: 'verification',
-      label: 'Student ID Verification',
-      sublabel: user?.universityName || 'Campus Member',
-      icon: ShieldCheck,
-      bgColor: 'bg-[#F45CB0]/15 text-[#F45CB0]',
-      status: isUserVerified ? 'Verified' : 'Pending Review',
-      statusColor: isUserVerified ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200',
-      action: () => setActiveModal('verification')
     },
     {
       id: 'myads',
@@ -301,25 +301,6 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
             <p className="text-xs text-blue-100/90 font-medium">
               {user?.universityName || "Campus Member"}
             </p>
-            
-            {/* Age, Course & Year Tags */}
-            <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
-              {calculateAge(editDob) && (
-                <span className="text-[10px] bg-white/20 backdrop-blur-md text-white font-semibold px-2.5 py-0.5 rounded-full border border-white/20">
-                  {calculateAge(editDob)} yrs old
-                </span>
-              )}
-              {editCourse && (
-                <span className="text-[10px] bg-white/20 backdrop-blur-md text-white font-semibold px-2.5 py-0.5 rounded-full border border-white/20">
-                  {editCourse}
-                </span>
-              )}
-              {editYear && (
-                <span className="text-[10px] bg-white/20 backdrop-blur-md text-white font-semibold px-2.5 py-0.5 rounded-full border border-white/20">
-                  {editYear}
-                </span>
-              )}
-            </div>
           </div>
         </div>
 
@@ -336,8 +317,13 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
             </div>
             
             {isUserVerified && (
-              <div className="absolute bottom-0 right-0 bg-[#1944F1] text-white p-1 rounded-full border-2 border-white shadow-md" title="Verified Student">
-                <CheckCircle2 className="w-4 h-4 fill-[#1944F1] text-white" />
+              <div className="absolute bottom-0 right-0 rounded-full border-2 border-white shadow-md flex items-center justify-center bg-white overflow-hidden ring-2 ring-emerald-500/20" title="ID Verified">
+                <svg 
+                  viewBox="0 0 191.667 191.667" 
+                  className="w-5 h-5 text-emerald-500 fill-current"
+                >
+                  <path d="M95.833,0C42.991,0,0,42.99,0,95.833s42.991,95.834,95.833,95.834s95.833-42.991,95.833-95.834S148.676,0,95.833,0z M150.862,79.646l-60.207,60.207c-2.56,2.56-5.963,3.969-9.583,3.969c-3.62,0-7.023-1.409-9.583-3.969l-30.685-30.685 c-2.56-2.56-3.97-5.963-3.97-9.583c0-3.621,1.41-7.024,3.97-9.584c2.559-2.56,5.962-3.97,9.583-3.97c3.62,0,7.024,1.41,9.583,3.971 l21.101,21.1l50.623-50.623c2.56-2.56,5.963-3.969,9.583-3.969c3.62,0,7.023,1.409,9.583,3.969 C156.146,65.765,156.146,74.362,150.862,79.646z"/>
+                </svg>
               </div>
             )}
           </div>
@@ -380,80 +366,6 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
               </div>
               <div className="text-[11px] font-medium text-slate-400">0 Reviews</div>
             </button>
-          </div>
-        </div>
-
-        {/* Student Information Section */}
-        <div className="px-5 mb-5">
-          <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-xs border border-slate-100 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#1944F1] flex items-center justify-center">
-                  <GraduationCap className="w-4 h-4" />
-                </div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Student Information</h3>
-              </div>
-              <button
-                onClick={() => setActiveModal('edit_profile')}
-                className="text-[11px] font-semibold text-[#1944F1] hover:underline flex items-center gap-1"
-              >
-                <UserPen className="w-3.5 h-3.5" />
-                <span>Edit</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-slate-100">
-                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block mb-0.5">Date of Birth</span>
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-[#1944F1] shrink-0" />
-                  <span className="text-xs font-bold text-slate-800">
-                    {(user?.dob || editDob) ? (
-                      new Date(user?.dob || editDob).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
-                    ) : 'Not specified'}
-                  </span>
-                </div>
-                {calculateAge(user?.dob || editDob) && (
-                  <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">
-                    {calculateAge(user?.dob || editDob)} years old
-                  </span>
-                )}
-              </div>
-
-              <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-slate-100">
-                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block mb-0.5">College Campus</span>
-                <div className="flex items-center gap-1.5">
-                  <School className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span className="text-xs font-bold text-slate-800 truncate">
-                    {user?.universityName || 'Campus Member'}
-                  </span>
-                </div>
-                <span className="text-[10px] text-emerald-600 font-semibold mt-0.5 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> {isUserVerified ? 'Verified Student' : 'ID Pending'}
-                </span>
-              </div>
-
-              <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-slate-100">
-                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block mb-0.5">Course / Major</span>
-                <span className="text-xs font-bold text-slate-800 truncate block">
-                  {editCourse || 'General Studies'}
-                </span>
-                <span className="text-[10px] text-slate-500 font-medium mt-0.5 block">
-                  {editYear || 'Undergraduate'}
-                </span>
-              </div>
-
-              <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-slate-100">
-                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block mb-0.5">College Email</span>
-                <div className="flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                  <span className="text-xs font-bold text-slate-800 truncate">
-                    {user?.email || 'Student Email'}
-                  </span>
-                </div>
-                <span className="text-[10px] text-slate-400 font-medium mt-0.5 block">Official Student Mail</span>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -534,7 +446,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2, ease: 'linear' }}
             onClick={() => setActiveModal(null)}
-            className="absolute inset-0 bg-slate-900/60 z-50 flex flex-col justify-end"
+            className="fixed inset-0 bg-slate-900/60 z-[100] flex flex-col justify-end"
           >
             <motion.div
               initial={{ y: "100%" }}
@@ -542,16 +454,15 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
               exit={{ y: "100%" }}
               transition={{ duration: 0.25, ease: [0.25, 1, 0.5, 1] }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full bg-white rounded-t-[36px] h-[85vh] flex flex-col justify-between overflow-hidden shadow-2xl will-change-transform"
+              className="w-full bg-white rounded-t-[32px] sm:rounded-t-[36px] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl will-change-transform"
             >
               {/* Modal Drag Header */}
               <div className="pt-3 pb-2 px-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-20 shrink-0">
                 <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 top-2.5" />
                 
                 <h2 className="text-base font-bold text-slate-900 font-sans pt-3">
-                  {activeModal === 'edit_profile' && 'Edit Profile Information'}
+                  {(activeModal === 'student_info' || activeModal === 'edit_profile') && 'Student Information'}
                   {activeModal === 'purchases' && 'Sales & Order History'}
-                  {activeModal === 'verification' && 'Student ID Verification'}
                   {activeModal === 'support' && 'Help & Campus Support'}
                   {activeModal === 'terms' && 'Terms of Services'}
                   {activeModal === 'privacy' && 'Privacy Policy'}
@@ -567,20 +478,20 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
               </div>
 
               {/* Modal Content Scroll Area */}
-              <div className="flex-1 overflow-y-auto p-6 pb-20 space-y-4">
+              <div className="flex-1 overflow-y-auto p-6 pb-14 space-y-4">
                 
-                {/* 0. EDIT PROFILE */}
-                {activeModal === 'edit_profile' && (
+                {/* STUDENT INFORMATION FORM */}
+                {(activeModal === 'student_info' || activeModal === 'edit_profile') && (
                   <form onSubmit={handleProfileSave} className="space-y-4 text-left">
                     {profileSavedMessage && (
                       <div className="p-3.5 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Profile information updated successfully!</span>
+                        <span>Student information saved successfully!</span>
                       </div>
                     )}
 
                     {/* Profile Picture Upload Picker */}
-                    <div className="flex flex-col items-center justify-center space-y-2 py-2">
+                    <div className="flex flex-col items-center justify-center space-y-2 py-1">
                       <div className="relative">
                         <div className="w-20 h-20 rounded-full border-2 border-slate-200 bg-slate-100 overflow-hidden flex items-center justify-center shadow-sm">
                           <img 
@@ -590,38 +501,32 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                             onError={(e) => { e.currentTarget.src = defaultAvatar; }}
                           />
                         </div>
-                        <label className="absolute bottom-0 right-0 p-1.5 bg-[#1944F1] hover:bg-blue-700 text-white rounded-full border border-white shadow-sm cursor-pointer transition-all active:scale-95">
+                        <label className="absolute bottom-0 right-0 p-1.5 bg-[#1944F1] hover:bg-blue-700 text-white rounded-full border border-white shadow-sm cursor-pointer transition-all active:scale-95" title="Update Profile Picture">
                           <Camera className="w-3.5 h-3.5" />
                           <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                         </label>
                       </div>
-                      <span className="text-[11px] font-semibold text-slate-500">Tap icon to update profile picture</span>
+                      <span className="text-[11px] font-semibold text-slate-500">Tap camera to change photo</span>
                     </div>
 
-                    {/* Editable: Full Name */}
+                    {/* Non-editable: Full Name */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Full Name</label>
-                      <div className="relative">
-                        <UserPen className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
+                      <label className="text-xs font-bold text-slate-700 block">Full Name</label>
+                      <div className="relative flex items-center">
+                        <UserPen className="w-4 h-4 text-slate-400 absolute left-4 z-10 pointer-events-none" />
                         <input
                           type="text"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          placeholder="Your Full Name"
-                          className="w-full pl-11 pr-4 py-3 bg-[#F3F4F6] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all"
+                          value={user?.fullName || user?.name || editName || 'Student'}
+                          readOnly
+                          className="w-full pl-11 pr-10 py-3 bg-[#F3F4F6] text-slate-600 font-medium rounded-2xl text-xs border border-transparent cursor-not-allowed select-none focus:outline-none"
                         />
+                        <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-4 pointer-events-none" />
                       </div>
                     </div>
 
-                    {/* Non-editable: College / University */}
+                    {/* Non-editable: College / Campus */}
                     <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-700">College / University</label>
-                        <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
-                          <Lock className="w-3 h-3 text-slate-400" />
-                          <span>Verified & Locked</span>
-                        </span>
-                      </div>
+                      <label className="text-xs font-bold text-slate-700 block">College / Campus</label>
                       <div className="relative flex items-center">
                         <School className="w-4 h-4 text-slate-400 absolute left-4 z-10 pointer-events-none" />
                         <input
@@ -632,14 +537,33 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                         />
                         <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-4 pointer-events-none" />
                       </div>
-                      <p className="text-[10px] text-slate-400 font-normal">
-                        College is verified from your student ID and cannot be modified.
-                      </p>
+                    </div>
+
+                    {/* Non-editable: College Email */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 block">College Email</label>
+                      <div className="relative flex items-center">
+                        <Mail className="w-4 h-4 text-slate-400 absolute left-4 z-10 pointer-events-none" />
+                        <input
+                          type="email"
+                          value={user?.email || user?.emailAddresses?.[0]?.emailAddress || ''}
+                          readOnly
+                          className="w-full pl-11 pr-10 py-3 bg-[#F3F4F6] text-slate-600 font-medium rounded-2xl text-xs border border-transparent cursor-not-allowed select-none focus:outline-none"
+                        />
+                        <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-4 pointer-events-none" />
+                      </div>
                     </div>
 
                     {/* Editable: Date of Birth (DOB) */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Date of Birth (Shows Age on Profile)</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700">Date of Birth</label>
+                        {calculateAge(editDob) && (
+                          <span className="text-[10px] text-[#1944F1] font-semibold bg-blue-50 px-2 py-0.5 rounded-md">
+                            {calculateAge(editDob)} years old
+                          </span>
+                        )}
+                      </div>
                       <div className="relative">
                         <Calendar className="w-4 h-4 text-slate-400 absolute left-4 top-3.5 z-10 pointer-events-none" />
                         <input
@@ -683,36 +607,12 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                       </select>
                     </div>
 
-                    {/* Non-editable: College Email */}
-                    <div className="space-y-1.5 pt-1">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-700">College Email</label>
-                        <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
-                          <Lock className="w-3 h-3 text-slate-400" />
-                          <span>Locked</span>
-                        </span>
-                      </div>
-                      <div className="relative flex items-center">
-                        <Mail className="w-4 h-4 text-slate-400 absolute left-4 z-10 pointer-events-none" />
-                        <input
-                          type="email"
-                          value={user?.email || user?.emailAddresses?.[0]?.emailAddress || ''}
-                          readOnly
-                          className="w-full pl-11 pr-10 py-3 bg-[#F3F4F6] text-slate-600 font-medium rounded-2xl text-xs border border-transparent cursor-not-allowed select-none focus:outline-none"
-                        />
-                        <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-4 pointer-events-none" />
-                      </div>
-                      <p className="text-[10px] text-slate-400 font-normal">
-                        Your registered student email is permanent and cannot be modified.
-                      </p>
-                    </div>
-
                     <button
                       type="submit"
-                      className="w-full py-3.5 px-6 rounded-2xl bg-[#1944F1] hover:bg-blue-700 text-white font-semibold text-xs shadow-md transition-all active:scale-[0.98] mt-2 flex items-center justify-center gap-2"
+                      className="w-full py-3.5 px-6 rounded-2xl bg-[#1944F1] hover:bg-blue-700 text-white font-semibold text-xs shadow-md transition-all active:scale-[0.98] mt-3 flex items-center justify-center gap-2"
                     >
                       <Check className="w-4 h-4" />
-                      <span>Save Profile Changes</span>
+                      <span>Save Changes</span>
                     </button>
                   </form>
                 )}
@@ -729,7 +629,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                             <p className="text-[10px] text-slate-400">{ad.category || 'Item'}</p>
                           </div>
                           <div className="text-right">
-                            <span className="text-xs font-extrabold text-slate-900 block">{ad.price}</span>
+                            <span className="text-xs font-extrabold text-slate-900 block">{formatRupeePrice(ad.price)}</span>
                             <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">
                               SOLD
                             </span>
@@ -748,100 +648,6 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                           </p>
                         </div>
                       </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 2. STUDENT ID VERIFICATION */}
-                {activeModal === 'verification' && (
-                  <div className="space-y-4 text-center">
-                    {isUserVerified ? (
-                      <>
-                        <div className="p-5 rounded-3xl bg-gradient-to-br from-indigo-600 to-[#1944F1] text-white shadow-lg space-y-3 text-left relative overflow-hidden">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold tracking-widest uppercase text-blue-200">Campus Verified ID</span>
-                            <ShieldCheck className="w-6 h-6 text-emerald-300" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-extrabold text-white">{user?.fullName || user?.name || 'Student'}</h3>
-                            <p className="text-xs text-blue-100">{user?.universityName || 'Campus Member'}</p>
-                          </div>
-                          <div className="pt-2 border-t border-white/20 flex items-center justify-between text-[10px] text-blue-100">
-                            <span className="flex items-center gap-1 text-emerald-200 font-semibold">
-                              <Check className="w-3.5 h-3.5" /> Authenticated via OCR
-                            </span>
-                            <span className="bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full font-bold">STATUS: VERIFIED</span>
-                          </div>
-                        </div>
-
-                        {(user?.studentIdUrl || localStorage.getItem('user_student_id_url')) && (
-                          <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 relative aspect-[16/9]">
-                            <img
-                              src={user?.studentIdUrl || localStorage.getItem('user_student_id_url')}
-                              alt="Verified Student ID"
-                              className="w-full h-full object-cover"
-                            />
-                            <div className="absolute top-2 right-2 bg-emerald-600/90 backdrop-blur-md px-2.5 py-1 rounded-lg flex items-center gap-1 text-[10px] font-bold text-white shadow-sm">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Card on File</span>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-left flex items-start gap-3">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                          <div className="text-xs space-y-1">
-                            <h4 className="font-bold text-emerald-900">Your account is fully verified</h4>
-                            <p className="text-emerald-700 leading-snug">
-                              Your student credentials and campus ID card have been authenticated. Buyers and sellers see your verified badge across all listings.
-                            </p>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="py-8 flex flex-col items-center justify-center text-center space-y-3">
-                          <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center">
-                            <ShieldAlert className="w-7 h-7 text-amber-500" />
-                          </div>
-                          <div className="space-y-1">
-                            <h4 className="text-sm font-bold text-slate-700">Verify Your Student ID</h4>
-                            <p className="text-xs text-slate-400 max-w-[260px] mx-auto leading-relaxed">
-                              Upload a photo of your valid university student ID card to get a verified badge on your profile and listings.
-                            </p>
-                          </div>
-                        </div>
-
-                        <label className="w-full py-3.5 px-6 rounded-2xl bg-[#1944F1] hover:bg-blue-700 text-white font-semibold text-xs shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer">
-                          <Upload className="w-4 h-4" />
-                          <span>Upload Student ID</span>
-                          <input type="file" accept="image/*,.pdf" className="hidden" onChange={async (e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              const file = e.target.files[0];
-                              try {
-                                showToast('Uploading & verifying Student ID...', 'success');
-                                const url = await uploadStudentId(file);
-                                localStorage.setItem('user_student_id_url', url);
-                                localStorage.setItem('user_id_verified', 'true');
-                                showToast('Student ID uploaded & marked as verified!', 'success');
-                              } catch (err) {
-                                console.error('Student ID upload error:', err);
-                                showToast('Failed to upload Student ID. Please try again.', 'error');
-                              }
-                            }
-                          }} />
-                        </label>
-
-                        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-100 text-left flex items-start gap-3">
-                          <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                          <div className="text-xs space-y-1">
-                            <h4 className="font-bold text-amber-800">Verification Pending</h4>
-                            <p className="text-amber-700 leading-snug">
-                              Upload your student ID to build trust with buyers. Verified accounts get a badge and higher visibility.
-                            </p>
-                          </div>
-                        </div>
-                      </>
                     )}
                   </div>
                 )}

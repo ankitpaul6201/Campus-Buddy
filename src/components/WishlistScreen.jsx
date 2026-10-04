@@ -10,6 +10,7 @@ import {
   Sparkles,
   Bell
 } from 'lucide-react';
+import { formatRupeePrice } from '../lib/api';
 
 export default function WishlistScreen({ 
   user, 
@@ -28,7 +29,7 @@ export default function WishlistScreen({
     {
       id: 'card-1',
       title: 'Engineering Mathematics Vol 2',
-      price: '$45',
+      price: '₹450',
       condition: 'LIKE NEW',
       conditionColor: 'bg-[#E0F2FE] text-[#0284C7]',
       image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
@@ -42,7 +43,7 @@ export default function WishlistScreen({
     {
       id: 'card-2',
       title: 'TI-84 Plus CE Graphing Calculator',
-      price: '$80',
+      price: '₹800',
       condition: 'GOOD',
       conditionColor: 'bg-[#EEF2FF] text-[#4F46E5]',
       image: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48b?auto=format&fit=crop&w=600&q=80',
@@ -56,7 +57,7 @@ export default function WishlistScreen({
     {
       id: 'card-3',
       title: 'Hercules Roadeo Campus Cycle',
-      price: '$120',
+      price: '₹1,200',
       condition: 'FAIR',
       conditionColor: 'bg-[#FFEDD5] text-[#EA580C]',
       image: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=600&q=80',
@@ -220,7 +221,7 @@ export default function WishlistScreen({
 
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-sm font-extrabold text-[#1944F1] font-sans">
-                            {item.price}
+                            {formatRupeePrice(item.price)}
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">
                             · {item.category || 'Marketplace'}

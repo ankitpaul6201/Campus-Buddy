@@ -1,51 +1,217 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
   ChevronRight, 
   Search, 
-  Send,
-  ShieldCheck,
-  CheckCheck,
-  MessageSquare
+  Send, 
+  ShieldCheck, 
+  CheckCheck, 
+  MessageSquare,
+  ShoppingBag
 } from 'lucide-react';
+import { 
+  fetchConversations, 
+  startConversation, 
+  fetchMessages, 
+  sendMessage, 
+  getStoredUser 
+} from '../lib/api';
 
-export default function ChatScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], onNavigateBack }) {
+export default function ChatScreen({ 
+  user, 
+  activeNav, 
+  setActiveNav, 
+  favorites = [], 
+  notifications = [], 
+  activeChatTarget, 
+  setActiveChatTarget, 
+  onNavigateBack 
+}) {
   const [selectedChatId, setSelectedChatId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [chatsList, setChatsList] = useState([]);
+  const [loadingChats, setLoadingChats] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
 
   const uploadedHeartPath = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z";
-  const activeChat = chatsList.find(c => c.id === selectedChatId) || chatsList[0] || {};
 
-  const handleSendMessage = (textToSend = inputText) => {
-    if (!textToSend.trim()) return;
+  const currentUserId = user?.id || user?._id || getStoredUser()?.id;
+
+  const formatConversation = (conv) => {
+    const otherParticipant = (conv.participants || []).find(
+      p => String(p._id || p.id) !== String(currentUserId)
+    ) || (conv.participants && conv.participants[0]) || {};
+
+    const name = otherParticipant.fullName || otherParticipant.name || conv.name || 'Campus Student';
+    const avatar = otherParticipant.avatar || (name ? name.charAt(0).toUpperCase() : 'S');
+    const productTitle = conv.product?.title || conv.productTitle || 'Campus Item';
+    
+    let timeStr = 'Just now';
+    if (conv.lastMessageAt || conv.updatedAt) {
+      try {
+        const d = new Date(conv.lastMessageAt || conv.updatedAt);
+        timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch {}
+    }
+
+    return {
+      id: conv._id || conv.id,
+      name,
+      avatar,
+      verified: otherParticipant.isVerified || false,
+      productTitle,
+      lastMessage: conv.lastMessage || 'Conversation started',
+      time: timeStr,
+      unreadCount: conv.unreadCount || 0,
+      productId: conv.product?._id || conv.product || conv.productId,
+      rawConv: conv
+    };
+  };
+
+  // Load conversations on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      try {
+        setLoadingChats(true);
+        const res = await fetchConversations();
+        if (isMounted && Array.isArray(res)) {
+          setChatsList(res.map(formatConversation));
+        }
+      } catch (err) {
+        console.warn('Error loading conversations:', err);
+      } finally {
+        if (isMounted) setLoadingChats(false);
+      }
+    }
+    load();
+    return () => { isMounted = false; };
+  }, [user]);
+
+  // Handle activeChatTarget passed from HomeScreen
+  useEffect(() => {
+    if (!activeChatTarget) return;
+
+    let isMounted = true;
+    async function initTargetChat() {
+      try {
+        const conv = await startConversation({
+          sellerId: activeChatTarget.sellerId,
+          productId: activeChatTarget.productId,
+          initialMessage: ''
+        });
+
+        if (!isMounted) return;
+
+        const targetId = conv._id || conv.id;
+        const formatted = formatConversation(conv);
+
+        if (activeChatTarget.sellerName) formatted.name = activeChatTarget.sellerName;
+        if (activeChatTarget.productTitle) formatted.productTitle = activeChatTarget.productTitle;
+        if (activeChatTarget.avatar) formatted.avatar = activeChatTarget.avatar;
+
+        setChatsList(prev => {
+          const exists = prev.some(c => c.id === targetId);
+          if (exists) {
+            return prev.map(c => c.id === targetId ? { ...c, ...formatted } : c);
+          }
+          return [formatted, ...prev];
+        });
+
+        setSelectedChatId(targetId);
+
+        // Load messages
+        const msgs = await fetchMessages(targetId);
+        if (isMounted && Array.isArray(msgs)) {
+          const currentUserIdStr = String(currentUserId || 'me');
+          setMessages(msgs.map(m => ({
+            id: m._id || m.id || Math.random(),
+            text: m.text,
+            sender: String(m.sender?._id || m.sender) === currentUserIdStr ? 'me' : 'other',
+            time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
+            read: m.read ?? true
+          })));
+        }
+      } catch (err) {
+        console.error('Failed to init target chat:', err);
+      } finally {
+        if (setActiveChatTarget) setActiveChatTarget(null);
+      }
+    }
+
+    initTargetChat();
+    return () => { isMounted = false; };
+  }, [activeChatTarget]);
+
+  const activeChat = chatsList.find(c => c.id === selectedChatId) || {};
+
+  const handleSelectChat = async (chatId) => {
+    setSelectedChatId(chatId);
+    try {
+      setLoadingMessages(true);
+      const msgs = await fetchMessages(chatId);
+      const currentUserIdStr = String(currentUserId || 'me');
+      if (Array.isArray(msgs)) {
+        setMessages(msgs.map(m => ({
+          id: m._id || m.id || Math.random(),
+          text: m.text,
+          sender: String(m.sender?._id || m.sender) === currentUserIdStr ? 'me' : 'other',
+          time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
+          read: m.read ?? true
+        })));
+      } else {
+        setMessages([]);
+      }
+    } catch (err) {
+      console.warn('Error fetching messages for chat:', err);
+      setMessages([]);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  const handleSendMessage = async (textToSend = inputText) => {
+    const trimmed = textToSend.trim();
+    if (!trimmed || !selectedChatId) return;
+
+    if (textToSend === inputText) setInputText("");
+
     const newMsg = {
-      id: Date.now(),
-      text: textToSend,
+      id: 'local_' + Date.now(),
+      text: trimmed,
       sender: 'me',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       read: true
     };
+
     setMessages(prev => [...prev, newMsg]);
-    if (textToSend === inputText) setInputText("");
+
+    setChatsList(prev => prev.map(c => 
+      c.id === selectedChatId 
+        ? { ...c, lastMessage: trimmed, time: 'Just now' } 
+        : c
+    ));
+
+    try {
+      await sendMessage(selectedChatId, trimmed);
+    } catch (err) {
+      console.warn('Failed to send message:', err);
+    }
   };
 
   const quickReplies = [
     "Is it available?",
     "Can you reduce price?",
-    "Where can we meet?"
+    "Where can we meet on campus?"
   ];
 
   const filteredChats = chatsList.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    c.productTitle.toLowerCase().includes(searchQuery.toLowerCase())
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (c.productTitle || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const primaryColor = '#1944F1';
-  const inactiveColor = '#94A3B8';
 
   return (
     <motion.div 
@@ -58,7 +224,7 @@ export default function ChatScreen({ user, activeNav, setActiveNav, favorites = 
       {/* Main Container */}
       <div className="flex-1 flex flex-col overflow-hidden pb-16">
         
-        {/* COMPACT TOP HEADER BAR - BROUGHT DOWN CLEANLY WITH TOP SAFE PADDING */}
+        {/* TOP HEADER BAR */}
         <div className="pt-14 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
           {selectedChatId ? (
             /* Active Thread Header */
@@ -71,21 +237,27 @@ export default function ChatScreen({ user, activeNav, setActiveNav, favorites = 
                   <ArrowLeft className="w-4 h-4" />
                 </button>
 
-                <div className="flex items-center gap-2">
-                  <img 
-                    src={activeChat?.avatar || ''} 
-                    alt={activeChat?.name || 'User'}
-                    className="w-8 h-8 rounded-full object-cover border border-slate-200" 
-                  />
+                <div className="flex items-center gap-2.5">
+                  {activeChat.avatar && activeChat.avatar.length > 2 ? (
+                    <img 
+                      src={activeChat.avatar} 
+                      alt={activeChat.name}
+                      className="w-8 h-8 rounded-full object-cover border border-slate-200" 
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center border border-blue-200">
+                      {activeChat.avatar || 'S'}
+                    </div>
+                  )}
                   <div>
                     <h3 className="text-xs font-bold text-slate-900 leading-tight flex items-center gap-1">
-                      {activeChat?.name || 'User'}
-                      {activeChat?.verified && (
+                      {activeChat.name || 'Campus Student'}
+                      {activeChat.verified && (
                         <ShieldCheck className="w-3 h-3 text-[#1944F1]" />
                       )}
                     </h3>
                     <p className="text-[10px] text-[#1944F1] font-semibold leading-tight">
-                      {activeChat?.productTitle || ''}
+                      {activeChat.productTitle || 'Campus Marketplace'}
                     </p>
                   </div>
                 </div>
@@ -163,6 +335,19 @@ export default function ChatScreen({ user, activeNav, setActiveNav, favorites = 
                     Meet in a public campus area for safety
                   </span>
                 </div>
+
+                {loadingMessages && (
+                  <div className="text-center py-4 text-xs text-slate-400">
+                    Loading messages...
+                  </div>
+                )}
+
+                {!loadingMessages && messages.length === 0 && (
+                  <div className="text-center py-8 space-y-1">
+                    <p className="text-xs text-slate-500 font-medium">No messages yet</p>
+                    <p className="text-[11px] text-slate-400">Say hello or ask questions about the item.</p>
+                  </div>
+                )}
 
                 {messages.map((msg) => {
                   const isMe = msg.sender === 'me';
@@ -248,7 +433,11 @@ export default function ChatScreen({ user, activeNav, setActiveNav, favorites = 
 
               {/* Inbox Cards */}
               <div className="space-y-2.5 pt-1">
-                {filteredChats.length === 0 ? (
+                {loadingChats ? (
+                  <div className="py-12 text-center text-xs text-slate-400">
+                    Loading conversations...
+                  </div>
+                ) : filteredChats.length === 0 ? (
                   <div className="py-16 text-center space-y-2 bg-white rounded-3xl p-6 border border-slate-100 shadow-2xs">
                     <MessageSquare className="w-10 h-10 text-slate-300 mx-auto" />
                     <h3 className="text-sm font-bold text-slate-800">No Messages Yet</h3>
@@ -258,55 +447,61 @@ export default function ChatScreen({ user, activeNav, setActiveNav, favorites = 
                   </div>
                 ) : (
                   filteredChats.map((chat) => (
-                  <div
-                    key={chat.id}
-                    onClick={() => setSelectedChatId(chat.id)}
-                    className="bg-white rounded-2xl p-3.5 border border-slate-100 shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3 group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="relative shrink-0">
-                        <img 
-                          src={chat.avatar} 
-                          alt={chat.name} 
-                          className="w-11 h-11 rounded-full object-cover border border-slate-100" 
-                        />
-                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1">
-                          <h3 className="text-xs font-bold text-slate-900 font-sans truncate">
-                            {chat.name}
-                          </h3>
-                          {chat.verified && (
-                            <ShieldCheck className="w-3 h-3 text-[#1944F1] shrink-0" />
+                    <div
+                      key={chat.id}
+                      onClick={() => handleSelectChat(chat.id)}
+                      className="bg-white rounded-2xl p-3.5 border border-slate-100 shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative shrink-0">
+                          {chat.avatar && chat.avatar.length > 2 ? (
+                            <img 
+                              src={chat.avatar} 
+                              alt={chat.name} 
+                              className="w-11 h-11 rounded-full object-cover border border-slate-100" 
+                            />
+                          ) : (
+                            <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 font-bold text-sm flex items-center justify-center border border-blue-200">
+                              {chat.avatar || 'S'}
+                            </div>
                           )}
+                          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
                         </div>
 
-                        <span className="inline-block bg-blue-50 text-[#1944F1] px-2 py-0.5 rounded-md text-[10px] font-semibold border border-blue-100/60 mt-0.5">
-                          {chat.productTitle}
-                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1">
+                            <h3 className="text-xs font-bold text-slate-900 font-sans truncate">
+                              {chat.name}
+                            </h3>
+                            {chat.verified && (
+                              <ShieldCheck className="w-3 h-3 text-[#1944F1] shrink-0" />
+                            )}
+                          </div>
 
-                        <p className="text-[11px] text-slate-500 font-normal truncate mt-1">
-                          {chat.lastMessage}
-                        </p>
+                          <span className="inline-block bg-blue-50 text-[#1944F1] px-2 py-0.5 rounded-md text-[10px] font-semibold border border-blue-100/60 mt-0.5">
+                            {chat.productTitle}
+                          </span>
+
+                          <p className="text-[11px] text-slate-500 font-normal truncate mt-1">
+                            {chat.lastMessage}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-[10px] text-slate-400">
+                          {chat.time}
+                        </span>
+                        {chat.unreadCount > 0 ? (
+                          <span className="w-4.5 h-4.5 rounded-full bg-[#1944F1] text-white text-[9px] font-bold flex items-center justify-center">
+                            {chat.unreadCount}
+                          </span>
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+                        )}
                       </div>
                     </div>
-
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className="text-[10px] text-slate-400">
-                        {chat.time}
-                      </span>
-                      {chat.unreadCount > 0 ? (
-                        <span className="w-4.5 h-4.5 rounded-full bg-[#1944F1] text-white text-[9px] font-bold flex items-center justify-center">
-                          {chat.unreadCount}
-                        </span>
-                      ) : (
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
-                      )}
-                    </div>
-                  </div>
-                ))
+                  ))
                 )}
               </div>
             </div>

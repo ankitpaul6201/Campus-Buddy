@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
-import { apiGetMe, apiLogout, getStoredUser, getAuthToken } from './lib/api';
+import { apiGetMe, apiLogout, getStoredUser, getAuthToken, fetchMyAds } from './lib/api';
 import SplashScreen from './components/SplashScreen';
 import WelcomeScreen from './components/WelcomeScreen';
 import LoginScreen from './components/LoginScreen';
@@ -29,6 +29,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [userAds, setUserAds] = useState([]);
+  const [activeChatTarget, setActiveChatTarget] = useState(null);
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
@@ -59,6 +60,9 @@ export default function App() {
             if (user) {
               setCurrentUser(user);
               setCurrentScreen('main');
+              fetchMyAds().then(ads => {
+                if (isMounted && Array.isArray(ads)) setUserAds(ads);
+              }).catch(() => {});
             } else {
               setCurrentUser(null);
               setCurrentScreen('welcome');
@@ -134,6 +138,9 @@ export default function App() {
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
     setCurrentScreen('main');
+    fetchMyAds().then(ads => {
+      if (Array.isArray(ads)) setUserAds(ads);
+    }).catch(() => {});
   };
 
   // Build a user object for screens that display profile info
@@ -252,6 +259,10 @@ export default function App() {
                 setFavorites={setFavorites}
                 notifications={notifications}
                 userAds={userAds}
+                onOpenChat={(target) => {
+                  setActiveChatTarget(target);
+                  setActiveNav('chats');
+                }}
                 onNavigate={(screen) => setCurrentScreen(screen)} 
               />
             )}
@@ -263,6 +274,8 @@ export default function App() {
                 setActiveNav={setActiveNav} 
                 favorites={favorites}
                 notifications={notifications}
+                activeChatTarget={activeChatTarget}
+                setActiveChatTarget={setActiveChatTarget}
                 onNavigateBack={() => setActiveNav('home')} 
               />
             )}
@@ -274,6 +287,12 @@ export default function App() {
                 setActiveNav={setActiveNav} 
                 favorites={favorites}
                 notifications={notifications}
+                userAds={userAds}
+                setUserAds={setUserAds}
+                onAdCreated={(newAd) => {
+                  setUserAds(prev => [newAd, ...prev.filter(a => (a._id || a.id) !== (newAd._id || newAd.id))]);
+                  setActiveNav('myads');
+                }}
                 onNavigateBack={() => setActiveNav('home')} 
               />
             )}

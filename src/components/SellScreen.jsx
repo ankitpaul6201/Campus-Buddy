@@ -10,7 +10,9 @@ import {
   Bell
 } from 'lucide-react';
 
-export default function SellScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], onNavigateBack }) {
+import { createProductListing, formatRupeePrice } from '../lib/api';
+
+export default function SellScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], setUserAds, onAdCreated, onNavigateBack }) {
   const [photos, setPhotos] = useState([]);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
@@ -19,8 +21,11 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [isNegotiable, setIsNegotiable] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showWishlistModal, setShowWishlistModal] = useState(false);
+
+  const wishlistedProducts = (userAds || []).filter(item => favorites.includes(item.id || item._id));
 
   const categories = [
     'Books & Notes',
@@ -33,33 +38,117 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
   ];
 
   const conditions = ['New', 'Like New', 'Good', 'Fair'];
-  const products = [
-    { id: 'card-1', title: 'Engineering Mathematics Vol 2', price: '$45', sellerName: 'Rahul', image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80' },
-    { id: 'card-2', title: 'TI-84 Plus CE Graphing Calculator', price: '$80', sellerName: 'Sarah', image: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48b?auto=format&fit=crop&w=600&q=80' }
-  ];
-
-  const wishlistedProducts = products.filter(p => favorites.includes(p.id));
   const uploadedHeartPath = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z";
 
-  const handlePhotoUpload = (e) => {
+  // Compress and read image as Base64 DataURL for reliable cross-device storage
+  const fileToDataUrl = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 900;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.82));
+        };
+        img.onerror = () => resolve(e.target.result);
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    const newPhotoUrls = files.map(file => URL.createObjectURL(file));
-    setPhotos(prev => [...prev, ...newPhotoUrls].slice(0, 10));
+    try {
+      const dataUrls = await Promise.all(files.map(fileToDataUrl));
+      setPhotos(prev => [...prev, ...dataUrls].slice(0, 10));
+    } catch {
+      const fallbackUrls = files.map(file => URL.createObjectURL(file));
+      setPhotos(prev => [...prev, ...fallbackUrls].slice(0, 10));
+    }
   };
 
   const removePhoto = (index) => {
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitted(true);
-    setTimeout(() => {
-      setIsSubmitted(false);
-      if (onNavigateBack) onNavigateBack();
-      else setActiveNav('home');
-    }, 1800);
+    if (!title.trim()) {
+      alert('Please enter a listing title');
+      return;
+    }
+    const cleanPrice = parseFloat(String(price).replace(/[^0-9.]/g, ''));
+    if (isNaN(cleanPrice) || cleanPrice < 0) {
+      alert('Please enter a valid price');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const finalImages = photos.length > 0 
+        ? photos 
+        : ['https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=600&q=80'];
+
+      const resolvedUni = user?.universityName || user?.university?.name || 'Campus Member';
+
+      const payload = {
+        title: title.trim(),
+        description: description.trim() || 'No description provided',
+        price: cleanPrice,
+        category: category || 'Other',
+        condition: condition || 'Like New',
+        location: location.trim() || resolvedUni,
+        images: finalImages,
+        campusName: resolvedUni,
+        universityName: resolvedUni
+      };
+
+      const created = await createProductListing(payload);
+      setIsSubmitted(true);
+
+      setTimeout(() => {
+        setIsSubmitted(false);
+        setIsSubmitting(false);
+
+        // Reset form
+        setTitle('');
+        setPrice('');
+        setDescription('');
+        setCategory('');
+        setPhotos([]);
+        setLocation('');
+
+        if (onAdCreated) {
+          onAdCreated(created);
+        } else if (setActiveNav) {
+          setActiveNav('myads');
+        } else if (onNavigateBack) {
+          onNavigateBack();
+        }
+      }, 900);
+    } catch (err) {
+      console.error('Failed to post ad:', err);
+      alert('Failed to post ad: ' + (err.message || 'Please check your connection'));
+      setIsSubmitting(false);
+    }
   };
 
   const primaryColor = '#1944F1';
@@ -239,12 +328,12 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
                 Price
               </label>
               <div className="relative">
-                <span className="absolute left-4 top-3.5 text-xs text-slate-400 font-medium">$</span>
+                <span className="absolute left-4 top-3.5 text-xs text-slate-400 font-medium">₹</span>
                 <input 
                   type="text"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
-                  placeholder="0.00"
+                  placeholder="e.g. 450"
                   className="w-full pl-8 pr-4 py-3.5 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] border border-slate-100/80"
                   required
                 />
@@ -493,7 +582,7 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
                       <img src={item.image} alt={item.title} className="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0" />
                       <div>
                         <h4 className="text-xs font-semibold text-slate-900 line-clamp-1 font-sans">{item.title}</h4>
-                        <p className="text-xs font-bold text-[#1944F1] mt-0.5">{item.price}</p>
+                        <p className="text-xs font-bold text-[#1944F1] mt-0.5">{formatRupeePrice(item.price)}</p>
                         <p className="text-[10px] text-slate-400 font-normal">Seller: {item.sellerName}</p>
                       </div>
                     </div>
