@@ -14,6 +14,8 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
   const [studentIdFile, setStudentIdFile] = useState(null);
   const [studentIdFileName, setStudentIdFileName] = useState('');
   const [idPreviewUrl, setIdPreviewUrl] = useState(null);
+  const [isUploadingId, setIsUploadingId] = useState(false);
+  const [uploadedIdUrl, setUploadedIdUrl] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -109,7 +111,11 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
       setError('Please select your university or campus to continue.');
       return;
     }
-    if (!studentIdFile && !localStorage.getItem('user_student_id_url')) {
+    if (isUploadingId) {
+      setError('Please wait until your Student ID Card has completely uploaded.');
+      return;
+    }
+    if (!uploadedIdUrl) {
       setError('Please upload your Student ID Card for verification before continuing.');
       return;
     }
@@ -213,7 +219,10 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
 
       // Background upload to Cloudinary
       uploadStudentId(file)
-        .then(url => localStorage.setItem('user_student_id_url', url))
+        .then(url => {
+          setUploadedIdUrl(url);
+          localStorage.setItem('user_student_id_url', url);
+        })
         .catch(err => console.error('Cloudinary student ID upload error:', err));
 
       // Re-trigger verification
@@ -265,7 +274,7 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
       localStorage.setItem('user_id_verified', 'true');
       localStorage.setItem('pending_id_verified', 'true');
 
-      const studentIdUrl = localStorage.getItem('user_student_id_url') || '';
+      const studentIdUrl = uploadedIdUrl || localStorage.getItem('user_student_id_url') || '';
 
       const result = await apiSignup({
         name: formData.name.trim(),
@@ -465,32 +474,64 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
                     <span>Upload Student ID Card (Campus Verification)</span>
                     <span className="text-rose-500 font-bold">*Required</span>
                   </label>
-                  <label className="w-full p-3.5 rounded-2xl border border-dashed border-slate-300 bg-[#F9FAFB] hover:bg-slate-100/80 transition-all cursor-pointer flex items-center justify-between group">
+                  <label className={`w-full p-3.5 rounded-2xl border border-dashed transition-all cursor-pointer flex items-center justify-between group ${
+                    isUploadingId
+                      ? 'border-blue-400 bg-blue-50/60 pointer-events-none'
+                      : uploadedIdUrl
+                        ? 'border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50/70'
+                        : 'border-slate-300 bg-[#F9FAFB] hover:bg-slate-100/80'
+                  }`}>
                     <div className="flex items-center gap-3">
                       {idPreviewUrl ? (
-                        <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shrink-0">
+                        <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shrink-0 relative">
                           <img src={idPreviewUrl} alt="ID preview" className="w-full h-full object-cover" />
+                          {isUploadingId && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                              <Loader2 className="w-4 h-4 text-white animate-spin" />
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 text-[#1944F1] flex items-center justify-center shrink-0">
-                          {studentIdFileName ? <FileText className="w-5 h-5 text-emerald-600" /> : <Upload className="w-4 h-4" />}
+                          {isUploadingId ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-[#1944F1]" />
+                          ) : uploadedIdUrl ? (
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                          ) : (
+                            <Upload className="w-4 h-4" />
+                          )}
                         </div>
                       )}
                       <div className="text-left">
                         <span className="text-xs font-bold text-slate-800 block leading-tight truncate max-w-[190px]">
-                          {studentIdFileName || 'Upload College ID Photo / PDF'}
+                          {isUploadingId
+                            ? 'Uploading ID Card...'
+                            : studentIdFileName || 'Upload College ID Photo / PDF'}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-normal block leading-tight mt-0.5">
-                          {studentIdFileName ? '✅ ID attached for verification' : 'PNG or JPG with clear name & campus'}
+                        <span className="text-[10px] block leading-tight mt-0.5">
+                          {isUploadingId ? (
+                            <span className="text-blue-600 font-medium">Uploading to secure server, please wait...</span>
+                          ) : uploadedIdUrl ? (
+                            <span className="text-emerald-600 font-medium">✅ ID uploaded & ready</span>
+                          ) : (
+                            <span className="text-slate-400">PNG or JPG with clear name & campus</span>
+                          )}
                         </span>
                       </div>
                     </div>
-                    <span className="text-xs font-semibold text-[#1944F1] bg-white px-3 py-1 rounded-xl border border-blue-200 shadow-2xs group-hover:bg-blue-50 transition-colors shrink-0">
-                      {studentIdFileName ? 'Change' : 'Browse'}
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-xl border shadow-2xs transition-colors shrink-0 ${
+                      isUploadingId
+                        ? 'bg-blue-100 text-blue-700 border-blue-200'
+                        : uploadedIdUrl
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-white text-[#1944F1] border-blue-200 group-hover:bg-blue-50'
+                    }`}>
+                      {isUploadingId ? 'Uploading...' : uploadedIdUrl ? 'Change' : 'Browse'}
                     </span>
                     <input
                       type="file"
                       accept="image/*"
+                      disabled={isUploadingId}
                       className="hidden"
                       onChange={async (e) => {
                         if (e.target.files?.[0]) {
@@ -499,14 +540,26 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
                           if (idPreviewUrl) URL.revokeObjectURL(idPreviewUrl);
                           setIdPreviewUrl(URL.createObjectURL(file));
                           setStudentIdFileName(`Uploading ${file.name}...`);
+                          setIsUploadingId(true);
+                          setUploadedIdUrl('');
                           setError('');
                           try {
                             const url = await uploadStudentId(file);
-                            localStorage.setItem('user_student_id_url', url);
-                            setStudentIdFileName(file.name);
+                            if (url) {
+                              setUploadedIdUrl(url);
+                              localStorage.setItem('user_student_id_url', url);
+                              setStudentIdFileName(file.name);
+                            } else {
+                              throw new Error('Upload failed - no URL returned');
+                            }
                           } catch (err) {
                             console.error('Cloudinary student ID upload error:', err);
-                            setStudentIdFileName(file.name);
+                            setError('Failed to upload ID card. Please ensure a stable connection and try again.');
+                            setStudentIdFileName('');
+                            setUploadedIdUrl('');
+                            localStorage.removeItem('user_student_id_url');
+                          } finally {
+                            setIsUploadingId(false);
                           }
                         }
                       }}
@@ -516,14 +569,44 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
               </div>
 
               <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleStep1Next}
-                  className="w-full py-4 px-6 rounded-2xl bg-[#0F0F0F] hover:bg-black text-white font-semibold text-base shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                >
-                  <span>Continue</span>
-                  <ChevronRight className="w-5 h-5" />
-                </button>
+                {(() => {
+                  const isContinueDisabled = !formData.university || isUploadingId || !uploadedIdUrl;
+                  return (
+                    <button
+                      type="button"
+                      id="college-continue-btn"
+                      onClick={handleStep1Next}
+                      disabled={isContinueDisabled}
+                      className={`w-full py-4 px-6 rounded-2xl font-semibold text-base transition-all flex items-center justify-center gap-2 ${
+                        isContinueDisabled
+                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none select-none pointer-events-none'
+                          : 'bg-[#0F0F0F] hover:bg-black text-white shadow-md active:scale-[0.98] cursor-pointer'
+                      }`}
+                    >
+                      {isUploadingId ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                          <span>Uploading ID Card...</span>
+                        </>
+                      ) : !uploadedIdUrl ? (
+                        <>
+                          <span>Upload ID Card to Continue</span>
+                          <ChevronRight className="w-5 h-5 opacity-40" />
+                        </>
+                      ) : !formData.university ? (
+                        <>
+                          <span>Select College to Continue</span>
+                          <ChevronRight className="w-5 h-5 opacity-40" />
+                        </>
+                      ) : (
+                        <>
+                          <span>Continue</span>
+                          <ChevronRight className="w-5 h-5" />
+                        </>
+                      )}
+                    </button>
+                  );
+                })()}
               </div>
             </motion.div>
           ) : step === 2 ? (
