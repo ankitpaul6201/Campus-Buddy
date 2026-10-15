@@ -19,7 +19,10 @@ function getTransporter() {
         auth: { user, pass },
         tls: {
           rejectUnauthorized: false
-        }
+        },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000
       });
     }
 
@@ -31,7 +34,10 @@ function getTransporter() {
       auth: { user, pass },
       tls: {
         rejectUnauthorized: false
-      }
+      },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 5000
     });
   }
 
@@ -95,33 +101,8 @@ async function sendVerificationCode({ to, code, name }) {
     </html>
   `;
 
-  if (transporter) {
-    const senderUser = (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim();
-    const fromAddress = process.env.EMAIL_FROM || `"Campus Buddy" <${senderUser}>`;
-
-    try {
-      const info = await transporter.sendMail({
-        from: fromAddress,
-        to,
-        subject: `${code} is your Campus Buddy verification code`,
-        text: `Your Campus Buddy password reset code is: ${code}. This code is valid for 15 minutes.`,
-        html: htmlContent
-      });
-      console.log(`[EmailService] Verification email delivered to ${to} (Message ID: ${info.messageId})`);
-      return { success: true, delivered: true, messageId: info.messageId, provider: 'smtp' };
-    } catch (err) {
-      console.error('[EmailService] SMTP delivery error:', err.message);
-      if (!process.env.RESEND_API_KEY) {
-        if (err.code === 'EAUTH' || (err.response && err.response.includes('535'))) {
-          throw new Error('Gmail authentication failed. Please check your EMAIL_USER and EMAIL_PASS (use a 16-character Google App Password).');
-        }
-        throw new Error(`Email delivery failed: ${err.message}`);
-      }
-      console.warn('[EmailService] SMTP connection failed, attempting Resend fallback...');
-    }
-  }
-
-  // Fallback: If RESEND_API_KEY is available
+  // 1. Primary Cloud Strategy: If RESEND_API_KEY is available, use HTTPS (Port 443)
+  // This completely avoids cloud firewall port-blocking (e.g. Render Free Tier blocks SMTP ports 465/587)
   if (process.env.RESEND_API_KEY) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
@@ -139,13 +120,36 @@ async function sendVerificationCode({ to, code, name }) {
       });
       const resData = await res.json();
       if (res.ok) {
-        console.log(`[EmailService] Verification email delivered via Resend to ${to} (ID: ${resData.id})`);
-        return { success: true, delivered: true, messageId: resData.id };
+        console.log(`[EmailService] Verification email successfully delivered via Resend to ${to} (ID: ${resData.id})`);
+        return { success: true, delivered: true, messageId: resData.id, provider: 'resend' };
       }
       console.warn('[EmailService] Resend API error:', resData);
-      throw new Error(resData.message || 'Email delivery failed via Resend');
     } catch (resendErr) {
-      throw new Error(`Resend delivery failed: ${resendErr.message}`);
+      console.warn('[EmailService] Resend HTTPS delivery error:', resendErr.message);
+    }
+  }
+
+  // 2. Secondary Strategy: Direct SMTP Transporter (Localhost or unblocked hosts)
+  if (transporter) {
+    const senderUser = (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim();
+    const fromAddress = process.env.EMAIL_FROM || `"Campus Buddy" <${senderUser}>`;
+
+    try {
+      const info = await transporter.sendMail({
+        from: fromAddress,
+        to,
+        subject: `${code} is your Campus Buddy verification code`,
+        text: `Your Campus Buddy password reset code is: ${code}. This code is valid for 15 minutes.`,
+        html: htmlContent
+      });
+      console.log(`[EmailService] Verification email delivered via SMTP to ${to} (Message ID: ${info.messageId})`);
+      return { success: true, delivered: true, messageId: info.messageId, provider: 'smtp' };
+    } catch (err) {
+      console.error('[EmailService] SMTP delivery error:', err.message);
+      if (err.code === 'EAUTH' || (err.response && err.response.includes('535'))) {
+        throw new Error('Gmail authentication failed. Please check your EMAIL_USER and EMAIL_PASS (use a 16-character Google App Password).');
+      }
+      throw new Error(`Email delivery failed: ${err.message}`);
     }
   }
 
