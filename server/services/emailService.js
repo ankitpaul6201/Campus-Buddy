@@ -108,13 +108,16 @@ async function sendVerificationCode({ to, code, name }) {
         html: htmlContent
       });
       console.log(`[EmailService] Verification email delivered to ${to} (Message ID: ${info.messageId})`);
-      return { success: true, delivered: true, messageId: info.messageId };
+      return { success: true, delivered: true, messageId: info.messageId, provider: 'smtp' };
     } catch (err) {
       console.error('[EmailService] SMTP delivery error:', err.message);
-      if (err.code === 'EAUTH' || (err.response && err.response.includes('535'))) {
-        throw new Error('Gmail authentication failed. Please check your EMAIL_USER and EMAIL_PASS (use a 16-character Google App Password).');
+      if (!process.env.RESEND_API_KEY) {
+        if (err.code === 'EAUTH' || (err.response && err.response.includes('535'))) {
+          throw new Error('Gmail authentication failed. Please check your EMAIL_USER and EMAIL_PASS (use a 16-character Google App Password).');
+        }
+        throw new Error(`Email delivery failed: ${err.message}`);
       }
-      throw new Error(`Email delivery failed: ${err.message}`);
+      console.warn('[EmailService] SMTP connection failed, attempting Resend fallback...');
     }
   }
 

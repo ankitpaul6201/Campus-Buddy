@@ -29,6 +29,22 @@ router.get('/email-status', (req, res) => {
   });
 });
 
+// Test email delivery directly from Render and return raw error/success
+router.get('/test-email', async (req, res) => {
+  const emailService = require('../services/emailService');
+  const targetEmail = req.query.to || 'ankitpaul6201@gmail.com';
+  try {
+    const result = await emailService.sendVerificationCode({
+      to: targetEmail,
+      code: '777888',
+      name: 'Ankit Test'
+    });
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, stack: err.stack });
+  }
+});
+
 // Readiness check (verifies database connectivity)
 router.get('/ready', (req, res) => {
   const ready = db.isReady();
