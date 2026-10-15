@@ -32,6 +32,9 @@ router.put('/me/password', authMiddleware, authController.updatePassword);
 // @route   POST /api/auth/forgot-password (rate-limited)
 router.post('/forgot-password', authLimiter, authController.requestResetCode);
 
+// @route   POST /api/auth/verify-reset-code (rate-limited)
+router.post('/verify-reset-code', authLimiter, authController.verifyResetCode);
+
 // @route   POST /api/auth/reset-password (rate-limited)
 router.post('/reset-password', authLimiter, authController.resetPassword);
 

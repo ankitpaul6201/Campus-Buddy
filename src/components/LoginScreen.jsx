@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, KeyRound, Lock } from 'lucide-react';
-import { apiLogin, apiForgotPassword, apiResetPassword, getStoredUser } from '../lib/api';
+import { apiLogin, apiForgotPassword, apiVerifyResetCode, apiResetPassword, getStoredUser } from '../lib/api';
 
 export default function LoginScreen({ onNavigate, onLoginSuccess }) {
   const [identifier, setIdentifier] = useState('');
@@ -22,7 +22,6 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
-  const [serverOtp, setServerOtp] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
 
   const handleSubmit = async (e) => {
@@ -109,12 +108,9 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
 
     setLoading(true);
     try {
-      const res = await apiForgotPassword({ email: trimmedEmail });
-      if (res.code) {
-        setServerOtp(String(res.code));
-        setForgotOtp(String(res.code));
-        setInfoMsg(`Verification code: ${res.code}`);
-      }
+      await apiForgotPassword({ email: trimmedEmail });
+      setForgotOtp('');
+      setInfoMsg(`A 6-digit verification code has been sent to ${trimmedEmail}. Please check your email inbox and spam folder.`);
       setForgotStep('otp');
     } catch (err) {
       setError(err.message || 'No account found with this email. Please check and try again.');
@@ -128,15 +124,26 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     e.preventDefault();
     setError('');
 
-    if (forgotOtp.length < 6) {
-      setError('Please enter the 6-digit verification code.');
+    const trimmedCode = forgotOtp.trim();
+    if (trimmedCode.length < 6) {
+      setError('Please enter the 6-digit verification code sent to your email.');
       return;
     }
-    if (serverOtp && forgotOtp.trim() !== serverOtp.trim()) {
-      setError('Invalid verification code. Please check and try again.');
-      return;
+
+    setLoading(true);
+    try {
+      await apiVerifyResetCode({
+        email: forgotEmail.trim().toLowerCase(),
+        code: trimmedCode,
+      });
+      setError('');
+      setInfoMsg('');
+      setForgotStep('new_password');
+    } catch (err) {
+      setError(err.message || 'Invalid or expired verification code. Please check your email and try again.');
+    } finally {
+      setLoading(false);
     }
-    setForgotStep('new_password');
   };
 
   const handleResendOtp = async () => {
@@ -144,14 +151,9 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     setInfoMsg('');
     setLoading(true);
     try {
-      const res = await apiForgotPassword({ email: forgotEmail.trim().toLowerCase() });
-      if (res.code) {
-        setServerOtp(String(res.code));
-        setForgotOtp(String(res.code));
-        setInfoMsg(`New verification code: ${res.code}`);
-      } else {
-        setInfoMsg('Verification code sent successfully.');
-      }
+      await apiForgotPassword({ email: forgotEmail.trim().toLowerCase() });
+      setForgotOtp('');
+      setInfoMsg('A new verification code has been sent to your email.');
     } catch (err) {
       setError(err.message || 'Failed to resend code. Please try again.');
     } finally {
@@ -199,7 +201,6 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     setForgotEmail('');
     setForgotOtp('');
     setNewPassword('');
-    setServerOtp('');
     setInfoMsg('');
     setError('');
     setForgotSuccess(false);
@@ -281,17 +282,8 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
           )}
 
           {infoMsg && (
-            <div className="p-3.5 rounded-xl bg-blue-50 text-[#1944F1] border border-blue-200 text-xs font-semibold flex items-center justify-between">
-              <span>{infoMsg}</span>
-              {serverOtp && forgotOtp !== serverOtp && (
-                <button
-                  type="button"
-                  onClick={() => setForgotOtp(serverOtp)}
-                  className="underline text-blue-700 font-bold ml-2 cursor-pointer"
-                >
-                  Auto-fill
-                </button>
-              )}
+            <div className="p-3.5 rounded-xl bg-blue-50 text-[#1944F1] border border-blue-200 text-xs font-medium leading-relaxed">
+              {infoMsg}
             </div>
           )}
 

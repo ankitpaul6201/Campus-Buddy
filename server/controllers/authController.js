@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cloudinary = require('cloudinary').v2;
 const User = require('../models/User');
+const emailService = require('../services/emailService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'campus_buddy_super_secret_jwt_key_2026_token_auth';
 
@@ -236,11 +237,56 @@ async function requestResetCode(req, res, next) {
     user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000); // Valid for 15 minutes
     await user.save();
 
+    // Send code strictly to the user's email inbox
+    try {
+      await emailService.sendVerificationCode({
+        to: resolvedEmail,
+        code,
+        name: user.fullName || user.name
+      });
+    } catch (emailErr) {
+      console.error('[authController] Failed to send verification email:', emailErr.message);
+      return res.status(500).json({
+        error: emailErr.message || 'Failed to send verification code to your email. Please contact support.'
+      });
+    }
+
     res.json({
       success: true,
-      message: 'Verification code generated successfully',
-      code
+      message: `A 6-digit verification code has been sent to ${resolvedEmail}. Please check your inbox and spam folder.`
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Verify password reset code
+ */
+async function verifyResetCode(req, res, next) {
+  try {
+    const { email, code } = req.body;
+    const resolvedEmail = (email || '').trim().toLowerCase();
+    const resolvedCode = (code || '').trim();
+
+    if (!resolvedEmail || !resolvedCode) {
+      return res.status(400).json({ error: 'Email and verification code are required' });
+    }
+
+    const user = await User.findOne({ email: resolvedEmail });
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with this email' });
+    }
+
+    if (!user.resetPasswordCode || user.resetPasswordCode !== resolvedCode) {
+      return res.status(400).json({ error: 'Invalid verification code. Please check your email and try again.' });
+    }
+
+    if (user.resetPasswordExpires && user.resetPasswordExpires < new Date()) {
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
+    }
+
+    res.json({ success: true, message: 'Verification code verified successfully' });
   } catch (err) {
     next(err);
   }
@@ -253,9 +299,10 @@ async function resetPassword(req, res, next) {
   try {
     const { email, code, newPassword } = req.body;
     const resolvedEmail = (email || '').trim().toLowerCase();
+    const resolvedCode = (code || '').trim();
 
-    if (!resolvedEmail || !newPassword) {
-      return res.status(400).json({ error: 'Email and new password are required' });
+    if (!resolvedEmail || !newPassword || !resolvedCode) {
+      return res.status(400).json({ error: 'Email, verification code, and new password are required' });
     }
     if (newPassword.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters long' });
@@ -266,14 +313,11 @@ async function resetPassword(req, res, next) {
       return res.status(404).json({ error: 'No account found with this email' });
     }
 
-    // Verify code if code was previously issued
-    if (user.resetPasswordCode && code) {
-      if (user.resetPasswordCode !== String(code).trim()) {
-        return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
-      }
-      if (user.resetPasswordExpires && user.resetPasswordExpires < new Date()) {
-        return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
-      }
+    if (!user.resetPasswordCode || user.resetPasswordCode !== resolvedCode) {
+      return res.status(400).json({ error: 'Invalid verification code. Please check your email and try again.' });
+    }
+    if (user.resetPasswordExpires && user.resetPasswordExpires < new Date()) {
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -368,6 +412,7 @@ module.exports = {
   updateUniversity,
   updatePassword,
   requestResetCode,
+  verifyResetCode,
   resetPassword,
   uploadStudentId,
   deleteAccount

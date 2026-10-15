@@ -162,6 +162,18 @@ export async function apiForgotPassword({ email }) {
   return data;
 }
 
+// Verify forgot password code before entering new password
+export async function apiVerifyResetCode({ email, code }) {
+  const res = await fetch(`${API_BASE_URL}/auth/verify-reset-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Invalid verification code');
+  return data;
+}
+
 // Reset password with email & verification code
 export async function apiResetPassword({ email, code, newPassword }) {
   const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
