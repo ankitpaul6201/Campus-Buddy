@@ -80,8 +80,8 @@ app.use('/api/universities', require('./routes/universities'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/notifications', require('./routes/notifications'));
 
-// 7. Root status endpoint
-app.get('/', (req, res) => {
+// 7. Root status endpoints (handles both / and /api)
+app.get(['/', '/api'], (req, res) => {
   res.json({
     status: 'online',
     app: 'Campus Buddy Backend API',
