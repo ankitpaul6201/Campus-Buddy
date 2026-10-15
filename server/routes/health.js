@@ -103,6 +103,28 @@ router.get('/test-gmail', async (req, res) => {
   }
 });
 
+// Test TCP port connectivity from Render to external mail servers
+router.get('/test-ports', async (req, res) => {
+  const net = require('net');
+  const probe = (host, port) => new Promise(resolve => {
+    const s = net.createConnection({ host, port, timeout: 3500 }, () => {
+      s.destroy();
+      resolve({ host, port, status: 'OPEN' });
+    });
+    s.on('error', (err) => resolve({ host, port, status: 'ERROR', code: err.code || err.message }));
+    s.on('timeout', () => { s.destroy(); resolve({ host, port, status: 'TIMEOUT' }); });
+  });
+
+  const results = await Promise.all([
+    probe('smtp.gmail.com', 465),
+    probe('smtp.gmail.com', 587),
+    probe('smtp-relay.brevo.com', 587),
+    probe('smtp-relay.brevo.com', 2525),
+    probe('api.resend.com', 443)
+  ]);
+  res.json({ results });
+});
+
 // Readiness check (verifies database connectivity)
 router.get('/ready', (req, res) => {
   const ready = db.isReady();

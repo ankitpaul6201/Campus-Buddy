@@ -110,12 +110,8 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     setIsOtpResent(false);
     setLoading(true);
     try {
-      const res = await apiForgotPassword({ email: trimmedEmail });
-      if (res?.code || res?.devCode) {
-        setForgotOtp(String(res.code || res.devCode));
-      } else {
-        setForgotOtp('');
-      }
+      await apiForgotPassword({ email: trimmedEmail });
+      setForgotOtp('');
       setForgotStep('otp');
     } catch (err) {
       setError(err.message || 'No account found with this email. Please check and try again.');
@@ -157,12 +153,8 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     setInfoMsg('');
     setLoading(true);
     try {
-      const res = await apiForgotPassword({ email: forgotEmail.trim().toLowerCase() });
-      if (res?.code || res?.devCode) {
-        setForgotOtp(String(res.code || res.devCode));
-      } else {
-        setForgotOtp('');
-      }
+      await apiForgotPassword({ email: forgotEmail.trim().toLowerCase() });
+      setForgotOtp('');
       setIsOtpResent(true);
     } catch (err) {
       setError(err.message || 'Failed to resend code. Please try again.');

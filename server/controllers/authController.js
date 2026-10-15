@@ -275,9 +275,7 @@ async function requestResetCode(req, res, next) {
 
     res.json({
       success: true,
-      message: `A 6-digit verification code has been sent to ${resolvedEmail}. Please check your inbox and spam folder.`,
-      code,
-      devCode: code
+      message: `A 6-digit verification code has been sent to ${resolvedEmail}. Please check your inbox and spam folder.`
     });
   } catch (err) {
     next(err);
