@@ -3,17 +3,34 @@ const nodemailer = require('nodemailer');
 /**
  * Campus Buddy Email Delivery Service
  * Dedicated Gmail SMTP using ankitpaul9341@gmail.com and Google App Password
- * Delivers verification OTP emails from ankitpaul9341@gmail.com to all user accounts
+ * Supports both Port 587 (STARTTLS - allowed on free cloud hosts like Koyeb) and Port 465 (SSL)
  */
 
-function getTransporter() {
+function createGmailTransporter(port = 587) {
   const user = (process.env.EMAIL_USER || 'ankitpaul9341@gmail.com').trim();
   const rawPass = (process.env.EMAIL_PASS || 'slmjcgobjlphuevg').trim();
   const pass = rawPass.replace(/\s+/g, '');
 
+  if (port === 587) {
+    return nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // STARTTLS
+      auth: { user, pass },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 10000,
+      socketTimeout: 15000
+    });
+  }
+
   return nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user, pass }
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // SSL/TLS
+    auth: { user, pass },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 10000,
+    socketTimeout: 15000
   });
 }
 
@@ -30,7 +47,6 @@ function escapeHtml(str) {
  * Send password reset verification code email from ankitpaul9341@gmail.com
  */
 async function sendVerificationCode({ to, code, name }) {
-  const transporter = getTransporter();
   const senderUser = (process.env.EMAIL_USER || 'ankitpaul9341@gmail.com').trim();
   const fromAddress = `"Campus Buddy" <${senderUser}>`;
 
@@ -76,23 +92,34 @@ async function sendVerificationCode({ to, code, name }) {
     </html>
   `;
 
-  try {
-    const info = await transporter.sendMail({
-      from: fromAddress,
-      to,
-      subject: `${code} is your Campus Buddy verification code`,
-      text: `Your Campus Buddy password reset code is: ${code}. This code is valid for 15 minutes.`,
-      html: htmlContent
-    });
-    console.log(`[EmailService] Verification email successfully delivered via Gmail from ${senderUser} to ${to} (Message ID: ${info.messageId})`);
-    return { success: true, delivered: true, messageId: info.messageId, provider: 'gmail' };
-  } catch (err) {
-    console.error(`[EmailService] Gmail SMTP delivery failed from ${senderUser} to ${to}:`, err.message);
-    if (err.code === 'EAUTH' || (err.response && err.response.includes('535'))) {
-      throw new Error('Gmail authentication failed. Please check your EMAIL_USER and EMAIL_PASS (use a 16-character Google App Password).');
+  // Try Port 587 (STARTTLS) first, fall back to Port 465 (SSL)
+  const portsToTry = [587, 465];
+  let lastError = null;
+
+  for (const port of portsToTry) {
+    try {
+      const transporter = createGmailTransporter(port);
+      const info = await transporter.sendMail({
+        from: fromAddress,
+        to,
+        subject: `${code} is your Campus Buddy verification code`,
+        text: `Your Campus Buddy password reset code is: ${code}. This code is valid for 15 minutes.`,
+        html: htmlContent
+      });
+
+      console.log(`[EmailService] Verification email successfully delivered via Gmail (Port ${port}) from ${senderUser} to ${to} (Message ID: ${info.messageId})`);
+      return { success: true, delivered: true, messageId: info.messageId, port, provider: 'gmail' };
+    } catch (err) {
+      console.warn(`[EmailService] Gmail delivery attempt on port ${port} failed:`, err.message);
+      lastError = err;
     }
-    throw new Error(`Email delivery failed: ${err.message}`);
   }
+
+  console.error(`[EmailService] All Gmail delivery attempts failed for ${to}:`, lastError?.message);
+  if (lastError?.code === 'EAUTH' || (lastError?.response && lastError.response.includes('535'))) {
+    throw new Error('Gmail authentication failed. Please check your EMAIL_USER and EMAIL_PASS (use a 16-character Google App Password).');
+  }
+  throw new Error(`Email delivery failed: ${lastError?.message || 'SMTP connection timeout'}`);
 }
 
 module.exports = {
