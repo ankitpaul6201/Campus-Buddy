@@ -41,12 +41,19 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Advanced Filter & Sort State
+  // Applied Filter & Sort State (active on listings)
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [selectedSort, setSelectedSort] = useState('recommended'); // 'recommended' | 'price_low' | 'price_high' | 'newest'
-  const [minPrice, setMinPrice] = useState('');
-  const [maxPrice, setMaxPrice] = useState('');
-  const [selectedCondition, setSelectedCondition] = useState('all'); // 'all' | 'like_new' | 'good' | 'fair' | 'new'
+  const [appliedSort, setAppliedSort] = useState('recommended'); // 'recommended' | 'price_low' | 'price_high' | 'newest'
+  const [appliedMinPrice, setAppliedMinPrice] = useState('');
+  const [appliedMaxPrice, setAppliedMaxPrice] = useState('');
+  const [appliedCondition, setAppliedCondition] = useState('all'); // 'all' | 'like_new' | 'good' | 'fair' | 'new'
+
+  // Staged / Draft Filter State (inside modal before 'Show Results' is clicked)
+  const [draftSort, setDraftSort] = useState('recommended');
+  const [draftMinPrice, setDraftMinPrice] = useState('');
+  const [draftMaxPrice, setDraftMaxPrice] = useState('');
+  const [draftCondition, setDraftCondition] = useState('all');
+  const [draftCategory, setDraftCategory] = useState('all');
 
   const userUniversity = user?.universityName || user?.university?.name || '';
 
@@ -105,17 +112,47 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
   };
 
   const activeFilterCount = (
-    (selectedSort !== 'recommended' ? 1 : 0) +
-    (minPrice !== '' || maxPrice !== '' ? 1 : 0) +
-    (selectedCondition !== 'all' ? 1 : 0)
+    (appliedSort !== 'recommended' ? 1 : 0) +
+    (appliedMinPrice !== '' || appliedMaxPrice !== '' ? 1 : 0) +
+    (appliedCondition !== 'all' ? 1 : 0)
   );
   const hasActiveFilters = activeFilterCount > 0;
 
+  const handleOpenFilterModal = () => {
+    setDraftSort(appliedSort);
+    setDraftMinPrice(appliedMinPrice);
+    setDraftMaxPrice(appliedMaxPrice);
+    setDraftCondition(appliedCondition);
+    setDraftCategory(activeTab);
+    setIsFilterModalOpen(true);
+  };
+
+  const handleApplyFilters = () => {
+    setAppliedSort(draftSort);
+    setAppliedMinPrice(draftMinPrice);
+    setAppliedMaxPrice(draftMaxPrice);
+    setAppliedCondition(draftCondition);
+    setActiveTab(draftCategory);
+    setIsFilterModalOpen(false);
+  };
+
+  const handleResetDraftFilters = () => {
+    setDraftSort('recommended');
+    setDraftMinPrice('');
+    setDraftMaxPrice('');
+    setDraftCondition('all');
+    setDraftCategory('all');
+  };
+
+  const handleCloseFilterModal = () => {
+    setIsFilterModalOpen(false);
+  };
+
   const handleResetFilters = () => {
-    setSelectedSort('recommended');
-    setMinPrice('');
-    setMaxPrice('');
-    setSelectedCondition('all');
+    setAppliedSort('recommended');
+    setAppliedMinPrice('');
+    setAppliedMaxPrice('');
+    setAppliedCondition('all');
     setActiveTab('all');
     setSearchQuery('');
   };
@@ -201,31 +238,31 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
 
     // 3. Price filter
     const priceNum = getNumericPrice(item.price);
-    if (minPrice !== '' && !isNaN(Number(minPrice)) && priceNum < Number(minPrice)) {
+    if (appliedMinPrice !== '' && !isNaN(Number(appliedMinPrice)) && priceNum < Number(appliedMinPrice)) {
       return false;
     }
-    if (maxPrice !== '' && !isNaN(Number(maxPrice)) && priceNum > Number(maxPrice)) {
+    if (appliedMaxPrice !== '' && !isNaN(Number(appliedMaxPrice)) && priceNum > Number(appliedMaxPrice)) {
       return false;
     }
 
     // 4. Condition filter
-    if (selectedCondition !== 'all') {
+    if (appliedCondition !== 'all') {
       const cond = (item.condition || '').toUpperCase().replace(/\s+/g, '_');
-      if (selectedCondition === 'new' && (cond.includes('LIKE') || !cond.includes('NEW'))) return false;
-      if (selectedCondition === 'like_new' && !cond.includes('LIKE')) return false;
-      if (selectedCondition === 'good' && !cond.includes('GOOD')) return false;
-      if (selectedCondition === 'fair' && !cond.includes('FAIR')) return false;
+      if (appliedCondition === 'new' && (cond.includes('LIKE') || !cond.includes('NEW'))) return false;
+      if (appliedCondition === 'like_new' && !cond.includes('LIKE')) return false;
+      if (appliedCondition === 'good' && !cond.includes('GOOD')) return false;
+      if (appliedCondition === 'fair' && !cond.includes('FAIR')) return false;
     }
 
     return true;
   }).sort((a, b) => {
-    if (selectedSort === 'price_low') {
+    if (appliedSort === 'price_low') {
       return getNumericPrice(a.price) - getNumericPrice(b.price);
     }
-    if (selectedSort === 'price_high') {
+    if (appliedSort === 'price_high') {
       return getNumericPrice(b.price) - getNumericPrice(a.price);
     }
-    if (selectedSort === 'newest') {
+    if (appliedSort === 'newest') {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return dateB - dateA;
@@ -384,7 +421,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
           </div>
 
           <button
-            onClick={() => setIsFilterModalOpen(true)}
+            onClick={handleOpenFilterModal}
             className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-all shrink-0 shadow-2xs relative ${hasActiveFilters
                 ? 'bg-[#1944F1] text-white shadow-md shadow-blue-500/25 ring-2 ring-[#1944F1]/20 active:scale-95'
                 : 'bg-[#F5F3F3] text-slate-800 border border-slate-100 hover:bg-slate-200/60 active:scale-95'
@@ -410,22 +447,22 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
         {/* Active Filter Chips Bar (Dismissible) */}
         {(hasActiveFilters || searchQuery.trim()) && (
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 text-xs">
-            {selectedSort !== 'recommended' && (
+            {appliedSort !== 'recommended' && (
               <span className="px-2.5 py-1 rounded-full bg-blue-50 text-[#1944F1] font-semibold border border-blue-100 flex items-center gap-1 shrink-0">
-                <span>Sort: {selectedSort === 'price_low' ? 'Low to High' : selectedSort === 'price_high' ? 'High to Low' : 'Newest'}</span>
-                <button onClick={() => setSelectedSort('recommended')} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
+                <span>Sort: {appliedSort === 'price_low' ? 'Low to High' : appliedSort === 'price_high' ? 'High to Low' : 'Newest'}</span>
+                <button onClick={() => setAppliedSort('recommended')} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
               </span>
             )}
-            {(minPrice || maxPrice) && (
+            {(appliedMinPrice || appliedMaxPrice) && (
               <span className="px-2.5 py-1 rounded-full bg-blue-50 text-[#1944F1] font-semibold border border-blue-100 flex items-center gap-1 shrink-0">
-                <span>Price: {minPrice ? formatRupeePrice(minPrice) : '₹0'} - {maxPrice ? formatRupeePrice(maxPrice) : 'Any'}</span>
-                <button onClick={() => { setMinPrice(''); setMaxPrice(''); }} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
+                <span>Price: {appliedMinPrice ? formatRupeePrice(appliedMinPrice) : '₹0'} - {appliedMaxPrice ? formatRupeePrice(appliedMaxPrice) : 'Any'}</span>
+                <button onClick={() => { setAppliedMinPrice(''); setAppliedMaxPrice(''); }} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
               </span>
             )}
-            {selectedCondition !== 'all' && (
+            {appliedCondition !== 'all' && (
               <span className="px-2.5 py-1 rounded-full bg-blue-50 text-[#1944F1] font-semibold border border-blue-100 flex items-center gap-1 shrink-0">
-                <span className="capitalize">{selectedCondition.replace('_', ' ')}</span>
-                <button onClick={() => setSelectedCondition('all')} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
+                <span className="capitalize">{appliedCondition.replace('_', ' ')}</span>
+                <button onClick={() => setAppliedCondition('all')} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
               </span>
             )}
             {searchQuery.trim() && (
@@ -640,7 +677,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            onClick={() => setIsFilterModalOpen(false)}
+            onClick={handleCloseFilterModal}
             className="fixed inset-0 bg-slate-900/60 z-[100] flex flex-col justify-end backdrop-blur-xs"
           >
             <motion.div
@@ -658,7 +695,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                   <h3 className="text-base font-bold text-slate-900 font-sans">Filter & Sort</h3>
                 </div>
                 <button
-                  onClick={() => setIsFilterModalOpen(false)}
+                  onClick={handleCloseFilterModal}
                   className="w-8 h-8 rounded-full bg-[#F5F3F3] hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
                 >
                   <X className="w-4 h-4" />
@@ -679,12 +716,12 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                       { id: 'price_high', label: 'Price: High to Low' },
                       { id: 'newest', label: 'Newest First' },
                     ].map(opt => {
-                      const isSel = selectedSort === opt.id;
+                      const isSel = draftSort === opt.id;
                       return (
                         <button
                           key={opt.id}
                           type="button"
-                          onClick={() => setSelectedSort(opt.id)}
+                          onClick={() => setDraftSort(opt.id)}
                           className={`p-2.5 px-3 rounded-2xl text-xs border transition-all text-left flex items-center justify-between font-light ${isSel
                               ? 'border-[#1944F1] bg-blue-50/70 text-[#1944F1] shadow-2xs'
                               : 'border-slate-100 bg-[#F8FAFC] text-slate-600 hover:bg-slate-100'
@@ -704,10 +741,10 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                     <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                       Price Range
                     </label>
-                    {(minPrice || maxPrice) && (
+                    {(draftMinPrice || draftMaxPrice) && (
                       <button
                         type="button"
-                        onClick={() => { setMinPrice(''); setMaxPrice(''); }}
+                        onClick={() => { setDraftMinPrice(''); setDraftMaxPrice(''); }}
                         className="text-[11px] font-light text-[#1944F1] hover:underline"
                       >
                         Clear Price
@@ -723,18 +760,18 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                       { label: '₹5,000 - ₹25,000', min: '5000', max: '25000' },
                       { label: '₹25,000 - ₹2,00,000', min: '25000', max: '200000' },
                     ].map((preset, idx) => {
-                      const isPreset = minPrice === preset.min && maxPrice === preset.max;
+                      const isPreset = draftMinPrice === preset.min && draftMaxPrice === preset.max;
                       return (
                         <button
                           key={idx}
                           type="button"
                           onClick={() => {
                             if (isPreset) {
-                              setMinPrice('');
-                              setMaxPrice('');
+                              setDraftMinPrice('');
+                              setDraftMaxPrice('');
                             } else {
-                              setMinPrice(preset.min);
-                              setMaxPrice(preset.max);
+                              setDraftMinPrice(preset.min);
+                              setDraftMaxPrice(preset.max);
                             }
                           }}
                           className={`py-2 px-3 rounded-2xl text-xs border transition-all text-center font-light ${isPreset
@@ -757,14 +794,14 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                         min="0"
                         max="200000"
                         placeholder="Min price (₹)"
-                        value={minPrice}
+                        value={draftMinPrice}
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val === '') {
-                            setMinPrice('');
+                            setDraftMinPrice('');
                           } else {
                             const num = Math.max(0, Math.min(200000, Number(val)));
-                            setMinPrice(String(num));
+                            setDraftMinPrice(String(num));
                           }
                         }}
                         className="w-full pl-7 pr-3 py-2.5 bg-[#F8FAFC] border border-slate-200 rounded-2xl text-xs font-light text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#1944F1]"
@@ -777,14 +814,14 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                         min="0"
                         max="200000"
                         placeholder="Max (up to ₹2,00,000)"
-                        value={maxPrice}
+                        value={draftMaxPrice}
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val === '') {
-                            setMaxPrice('');
+                            setDraftMaxPrice('');
                           } else {
                             const num = Math.max(0, Math.min(200000, Number(val)));
-                            setMaxPrice(String(num));
+                            setDraftMaxPrice(String(num));
                           }
                         }}
                         className="w-full pl-7 pr-3 py-2.5 bg-[#F8FAFC] border border-slate-200 rounded-2xl text-xs font-light text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#1944F1]"
@@ -804,12 +841,12 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {categories.map(cat => {
-                      const isSel = activeTab === cat.id;
+                      const isSel = draftCategory === cat.id;
                       return (
                         <button
                           key={cat.id}
                           type="button"
-                          onClick={() => setActiveTab(cat.id)}
+                          onClick={() => setDraftCategory(cat.id)}
                           className={`px-3.5 py-2 rounded-2xl text-xs border transition-all font-light ${isSel
                               ? 'bg-[#1944F1] text-white border-[#1944F1] shadow-2xs'
                               : 'bg-[#F8FAFC] border-slate-200 text-slate-600 hover:bg-slate-100'
@@ -835,12 +872,12 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                       { id: 'good', label: 'Good' },
                       { id: 'fair', label: 'Fair' },
                     ].map(cond => {
-                      const isSel = selectedCondition === cond.id;
+                      const isSel = draftCondition === cond.id;
                       return (
                         <button
                           key={cond.id}
                           type="button"
-                          onClick={() => setSelectedCondition(cond.id)}
+                          onClick={() => setDraftCondition(cond.id)}
                           className={`px-3.5 py-2 rounded-2xl text-xs border transition-all font-light ${isSel
                               ? 'bg-[#1944F1] text-white border-[#1944F1] shadow-2xs'
                               : 'bg-[#F8FAFC] border-slate-200 text-slate-600 hover:bg-slate-100'
@@ -858,7 +895,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
               <div className="p-4 px-6 border-t border-slate-100 bg-white flex items-center gap-3 shrink-0">
                 <button
                   type="button"
-                  onClick={handleResetFilters}
+                  onClick={handleResetDraftFilters}
                   className="flex-1 py-3 px-4 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-light text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
@@ -866,7 +903,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsFilterModalOpen(false)}
+                  onClick={handleApplyFilters}
                   className="flex-[2] py-3 px-4 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white font-light text-xs shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
