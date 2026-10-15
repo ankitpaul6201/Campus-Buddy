@@ -1,13 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, CheckCircle2, ChevronRight, School,
-  User, Lock, Mail, Upload, FileText, Calendar, Eye, EyeOff,
+  ArrowLeft, CheckCircle2, ChevronRight, ChevronDown, Check, School,
+  User, Lock, Mail, Upload, FileText, Calendar as CalendarIcon, Eye, EyeOff,
   Scan, ShieldCheck, AlertCircle, XCircle, RefreshCw, Sparkles, Loader2, GraduationCap, WifiOff
 } from 'lucide-react';
+import { Calendar } from './ui/calendar';
 import { searchUniversities } from '../services/universityService';
 import { API_BASE_URL, uploadStudentId, apiSignup } from '../lib/api';
 import { verifyStudentIdCard } from '../services/idVerificationService';
+
+const ACADEMIC_YEAR_OPTIONS = [
+  { value: '1st Year', label: '1st Year (Freshman)' },
+  { value: '2nd Year', label: '2nd Year (Sophomore)' },
+  { value: '3rd Year', label: '3rd Year (Junior)' },
+  { value: '4th Year', label: '4th Year (Senior)' },
+  { value: "Postgraduate / Master's", label: "Postgraduate / Master's" },
+  { value: 'Ph.D. Scholar', label: 'Ph.D. Scholar' }
+];
 
 export default function SignupScreen({ onNavigate, onLoginSuccess }) {
   const [step, setStep] = useState(1);
@@ -18,6 +28,52 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
   const [uploadedIdUrl, setUploadedIdUrl] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showDobCalendar, setShowDobCalendar] = useState(false);
+  const [isYearDropdownOpen, setIsYearDropdownOpen] = useState(false);
+  const yearDropdownRef = useRef(null);
+  const calendarRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (yearDropdownRef.current && !yearDropdownRef.current.contains(event.target)) {
+        setIsYearDropdownOpen(false);
+      }
+      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+        setShowDobCalendar(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const calculateAge = (dobString) => {
+    if (!dobString) return null;
+    const dob = new Date(dobString);
+    if (isNaN(dob.getTime())) return null;
+    const diff_ms = Date.now() - dob.getTime();
+    const age_dt = new Date(diff_ms);
+    return Math.abs(age_dt.getUTCFullYear() - 1970);
+  };
+
+  const formatDisplayDob = (dobString) => {
+    if (!dobString) return 'Select your date of birth';
+    try {
+      const parts = String(dobString).split('-');
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+      }
+      const d = new Date(dobString);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      return dobString;
+    } catch {
+      return dobString;
+    }
+  };
   const [formData, setFormData] = useState({
     university: null,
     name: '',
@@ -653,20 +709,54 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 ml-1">
-                    Date of Birth
-                  </label>
-                  <div className="relative">
-                    <Calendar className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      type="date"
-                      value={formData.dob}
-                      onChange={(e) => setFormData(prev => ({ ...prev, dob: e.target.value }))}
-                      max={new Date().toISOString().split('T')[0]}
-                      className="w-full pl-12 pr-4 py-3.5 bg-[#F3F4F6] text-slate-900 rounded-2xl text-base font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all cursor-pointer"
-                    />
+                {/* Date of Birth (DOB) with Custom Calendar UI */}
+                <div className="space-y-1.5" ref={calendarRef}>
+                  <div className="flex items-center justify-between ml-1">
+                    <label className="text-xs font-bold text-slate-700">Date of Birth</label>
+                    {calculateAge(formData.dob) && (
+                      <span className="text-[10px] text-[#1944F1] font-semibold bg-blue-50 px-2 py-0.5 rounded-md">
+                        {calculateAge(formData.dob)} years old
+                      </span>
+                    )}
                   </div>
+                  
+                  {/* Trigger selector button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowDobCalendar(!showDobCalendar)}
+                    className={`w-full px-4 py-3.5 bg-[#F3F4F6] hover:bg-[#EAECEF] text-slate-900 rounded-2xl text-sm font-normal text-left relative flex items-center justify-between transition-all ${
+                      showDobCalendar ? 'ring-2 ring-[#1944F1] bg-white shadow-2xs' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <CalendarIcon className={`w-5 h-5 transition-colors shrink-0 ${showDobCalendar ? 'text-[#1944F1]' : 'text-slate-400'}`} />
+                      <span className={formData.dob ? 'text-slate-900 font-medium' : 'text-slate-400'}>
+                        {formatDisplayDob(formData.dob)}
+                      </span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${showDobCalendar ? 'rotate-180 text-[#1944F1]' : ''}`} />
+                  </button>
+
+                  {/* Calendar UI Component */}
+                  {showDobCalendar && (
+                    <div className="pt-1.5 animate-in fade-in duration-150">
+                      <Calendar
+                        mode="single"
+                        selected={formData.dob ? new Date(formData.dob) : undefined}
+                        onSelect={(selectedDate) => {
+                          if (selectedDate) {
+                            const year = selectedDate.getFullYear();
+                            const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                            const day = String(selectedDate.getDate()).padStart(2, '0');
+                            setFormData(prev => ({ ...prev, dob: `${year}-${month}-${day}` }));
+                            setShowDobCalendar(false);
+                          }
+                        }}
+                        className="rounded-2xl border border-slate-200/90 shadow-sm bg-white"
+                        captionLayout="dropdown"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="relative">
@@ -680,20 +770,50 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
                   />
                 </div>
 
-                <div className="relative">
-                  <select
-                    value={formData.year}
-                    onChange={(e) => setFormData(prev => ({ ...prev, year: e.target.value }))}
-                    className="w-full px-5 py-4 bg-[#F3F4F6] text-slate-900 rounded-2xl text-base font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all appearance-none cursor-pointer pr-10"
+                {/* Academic Year with Custom App-Styled Dropdown */}
+                <div className="space-y-1.5 relative" ref={yearDropdownRef}>
+                  <label className="text-xs font-bold text-slate-700 ml-1">Academic Year</label>
+                  
+                  {/* Trigger button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsYearDropdownOpen(!isYearDropdownOpen)}
+                    className={`w-full px-4 py-3.5 bg-[#F3F4F6] hover:bg-[#EAECEF] text-slate-900 rounded-2xl text-sm font-normal text-left flex items-center justify-between transition-all ${
+                      isYearDropdownOpen ? 'ring-2 ring-[#1944F1] bg-white shadow-2xs' : ''
+                    }`}
                   >
-                    <option value="1st Year">Current Year: 1st Year (Freshman)</option>
-                    <option value="2nd Year">Current Year: 2nd Year (Sophomore)</option>
-                    <option value="3rd Year">Current Year: 3rd Year (Junior)</option>
-                    <option value="4th Year">Current Year: 4th Year (Senior)</option>
-                    <option value="Postgraduate / Master's">Current Year: Postgraduate / Master's</option>
-                    <option value="Ph.D. Scholar">Current Year: Ph.D. Scholar</option>
-                  </select>
-                  <ChevronRight className="w-5 h-5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+                    <span className="font-medium text-slate-900">
+                      {ACADEMIC_YEAR_OPTIONS.find(opt => opt.value === formData.year || opt.label === formData.year)?.label || formData.year || '1st Year (Freshman)'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${isYearDropdownOpen ? 'rotate-180 text-[#1944F1]' : ''}`} />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {isYearDropdownOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl shadow-xl border border-slate-100/90 p-1.5 py-2 z-30 animate-in fade-in zoom-in-95 duration-150">
+                      {ACADEMIC_YEAR_OPTIONS.map((opt) => {
+                        const isSelected = opt.value === formData.year || opt.label === formData.year;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, year: opt.value }));
+                              setIsYearDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-between transition-colors my-0.5 select-none ${
+                              isSelected
+                                ? 'bg-[#1944F1] text-white font-bold shadow-xs'
+                                : 'text-slate-700 hover:bg-blue-50 hover:text-[#1944F1] font-medium'
+                            }`}
+                          >
+                            <span>{opt.label}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-white shrink-0 ml-1.5" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="relative">
