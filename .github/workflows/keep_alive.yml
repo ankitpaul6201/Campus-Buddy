@@ -1,0 +1,29 @@
+name: 24/7 Render Backend Keep-Alive
+
+on:
+  schedule:
+    # Run every 10 minutes around the clock to keep Render free tier warm
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual test trigger from GitHub Actions dashboard
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Send External Keep-Alive Ping
+        run: |
+          echo "📡 Sending external keep-alive ping to Campus Buddy Render backend..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" --max-time 45 https://campus-buddy-backend-6hrs.onrender.com/api/health)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Status Code: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 400 ]; then
+            echo "✅ Keep-alive ping successful. Render backend is warm and responsive!"
+          else
+            echo "⚠️ Warning: Ping received HTTP $HTTP_CODE"
+            exit 1
+          fi
