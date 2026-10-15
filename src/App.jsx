@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
-import { apiGetMe, apiLogout, getStoredUser, getAuthToken, fetchMyAds, fetchNotifications, API_BASE_URL } from './lib/api';
+import { apiGetMe, apiLogout, getStoredUser, getAuthToken, fetchMyAds, fetchNotifications, resolveAllUserAds, API_BASE_URL } from './lib/api';
 import { initSocketClient, disconnectSocket, subscribeToNewNotifications, subscribeToUnreadCount } from './lib/socket';
 import SplashScreen from './components/SplashScreen';
 import WelcomeScreen from './components/WelcomeScreen';
@@ -81,7 +81,7 @@ export default function App() {
   const [activeNotificationToast, setActiveNotificationToast] = useState(null);
   const [userAds, setUserAds] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
+      return resolveAllUserAds(getStoredUser());
     } catch {
       return [];
     }
@@ -127,7 +127,7 @@ export default function App() {
               setLoadingStatusText('Loading campus marketplace...');
               setLoadingProgress(prev => Math.max(prev, 60));
               fetchMyAds().then(ads => {
-                if (isMounted && Array.isArray(ads)) setUserAds(ads);
+                if (isMounted) setUserAds(resolveAllUserAds(user, Array.isArray(ads) ? ads : []));
               }).catch(() => {});
             } else {
               setCurrentUser(null);
@@ -302,7 +302,7 @@ export default function App() {
       if (res && Array.isArray(res.notifications)) setNotifications(res.notifications);
     }).catch(() => {});
     fetchMyAds().then(ads => {
-      if (Array.isArray(ads)) setUserAds(ads);
+      setUserAds(resolveAllUserAds(currentUser || getStoredUser(), Array.isArray(ads) ? ads : []));
     }).catch(() => {});
   };
 

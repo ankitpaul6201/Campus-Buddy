@@ -10,55 +10,14 @@ import {
   Plus,
   Bell
 } from 'lucide-react';
-import { updateProductStatus, fetchMyAds, formatRupeePrice, getAdStats, incrementAdViews, getOptimizedImageUrl } from '../lib/api';
+import { updateProductStatus, fetchMyAds, formatRupeePrice, getAdStats, incrementAdViews, getOptimizedImageUrl, resolveAllUserAds } from '../lib/api';
 
 export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], setUserAds, onNavigateBack, onSelectProduct }) {
   const [activeFilter, setActiveFilter] = useState('all');
 
   // Helper to reliably find all listings created by the current student across backend & local caches
   const resolveMyAds = (incomingList = []) => {
-    try {
-      const currentUserId = String(user?._id || user?.id || '');
-      const currentUserEmail = (user?.email || (typeof window !== 'undefined' ? localStorage.getItem('pending_email') : '') || '').toLowerCase();
-      const currentUserName = (user?.fullName || user?.name || (typeof window !== 'undefined' ? localStorage.getItem('user_custom_fullname') : '') || '').toLowerCase();
-
-      const sources = [];
-      if (Array.isArray(incomingList) && incomingList.length > 0) {
-        sources.push(...incomingList);
-      }
-      try {
-        const localUserAds = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
-        if (Array.isArray(localUserAds)) sources.push(...localUserAds);
-      } catch {}
-      try {
-        const cachedProducts = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
-        if (Array.isArray(cachedProducts)) {
-          const myCached = cachedProducts.filter(p => {
-            if (!p) return false;
-            const seller = p.seller;
-            if (seller === 'user_me') return true;
-            const sellerId = typeof seller === 'object' ? String(seller?._id || seller?.id || '') : String(seller || '');
-            if (currentUserId && sellerId && sellerId === currentUserId) return true;
-            const sellerEmail = (typeof seller === 'object' ? seller?.email : '') || '';
-            if (currentUserEmail && sellerEmail && sellerEmail.toLowerCase() === currentUserEmail) return true;
-            const sellerName = (typeof seller === 'object' ? seller?.fullName || seller?.name : '') || '';
-            if (currentUserName && sellerName && sellerName.toLowerCase() === currentUserName) return true;
-            return false;
-          });
-          sources.push(...myCached);
-        }
-      } catch {}
-
-      const deduped = new Map();
-      sources.forEach(ad => {
-        if (ad && (ad._id || ad.id)) {
-          deduped.set(String(ad._id || ad.id), ad);
-        }
-      });
-      return Array.from(deduped.values());
-    } catch {
-      return incomingList || [];
-    }
+    return resolveAllUserAds(user, incomingList);
   };
 
   const [adsList, setAdsList] = useState(() => resolveMyAds(userAds));

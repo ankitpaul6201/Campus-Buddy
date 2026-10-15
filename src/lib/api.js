@@ -258,13 +258,16 @@ export async function fetchProducts(university) {
       if (!res.ok) throw new Error('Failed to fetch products');
       const data = await res.json();
       if (Array.isArray(data)) {
-        // Sync to local cache
+        // Sync to local cache and include all user ads so nothing is ever dropped
         const existingCached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
+        const userAds = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
         const mergedMap = new Map();
-        existingCached.forEach(p => mergedMap.set(p._id || p.id, p));
-        data.forEach(p => mergedMap.set(p._id || p.id, p));
-        localStorage.setItem('campus_products_cache', JSON.stringify(Array.from(mergedMap.values())));
-        return data;
+        existingCached.forEach(p => p && (p._id || p.id) && mergedMap.set(String(p._id || p.id), p));
+        userAds.forEach(p => p && (p._id || p.id) && mergedMap.set(String(p._id || p.id), p));
+        data.forEach(p => p && (p._id || p.id) && mergedMap.set(String(p._id || p.id), p));
+        const allMerged = Array.from(mergedMap.values());
+        localStorage.setItem('campus_products_cache', JSON.stringify(allMerged));
+        return allMerged;
       }
       return [];
     } catch (err) {
@@ -388,9 +391,63 @@ export async function createProductListing(productData, explicitToken) {
   return createdProduct;
 }
 
+// Universal helper to resolve all ads for a student from memory, local cache, and backend
+export function resolveAllUserAds(user = getStoredUser(), incomingList = []) {
+  try {
+    const currentUserId = String(user?._id || user?.id || '');
+    const currentUserEmail = (user?.email || (typeof window !== 'undefined' ? localStorage.getItem('pending_email') : '') || '').toLowerCase();
+    const currentUserName = (user?.fullName || user?.name || (typeof window !== 'undefined' ? localStorage.getItem('user_custom_fullname') : '') || '').toLowerCase();
+
+    const sources = [];
+    if (Array.isArray(incomingList) && incomingList.length > 0) {
+      sources.push(...incomingList);
+    }
+    try {
+      const localUserAds = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
+      if (Array.isArray(localUserAds)) sources.push(...localUserAds);
+    } catch {}
+    try {
+      const cachedProducts = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
+      if (Array.isArray(cachedProducts)) {
+        const myCached = cachedProducts.filter(p => {
+          if (!p) return false;
+          const seller = p.seller;
+          if (seller === 'user_me') return true;
+          const sellerId = typeof seller === 'object' ? String(seller?._id || seller?.id || '') : String(seller || '');
+          if (currentUserId && sellerId && sellerId === currentUserId) return true;
+          const sellerEmail = (typeof seller === 'object' ? seller?.email : '') || '';
+          if (currentUserEmail && sellerEmail && sellerEmail.toLowerCase() === currentUserEmail) return true;
+          const sellerName = (typeof seller === 'object' ? seller?.fullName || seller?.name : '') || '';
+          if (currentUserName && sellerName && sellerName.toLowerCase() === currentUserName) return true;
+          return false;
+        });
+        sources.push(...myCached);
+      }
+    } catch {}
+
+    const deduped = new Map();
+    sources.forEach(ad => {
+      if (ad && (ad._id || ad.id)) {
+        deduped.set(String(ad._id || ad.id), ad);
+      }
+    });
+
+    const result = Array.from(deduped.values());
+    if (result.length > 0) {
+      try {
+        localStorage.setItem('campus_user_ads', JSON.stringify(result));
+      } catch {}
+    }
+    return result;
+  } catch {
+    return incomingList || [];
+  }
+}
+
 // Fetch all listings for the logged-in user
 export async function fetchMyAds() {
   const token = getAuthToken();
+  const user = getStoredUser();
   try {
     if (token) {
       const res = await fetch(`${API_BASE_URL}/products/my-ads`, {
@@ -398,27 +455,14 @@ export async function fetchMyAds() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) {
-          // Merge backend ads with any locally saved ads to prevent accidental data loss
-          const localAds = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
-          const merged = new Map();
-          localAds.forEach(a => a && (a._id || a.id) && merged.set(String(a._id || a.id), a));
-          data.forEach(a => a && (a._id || a.id) && merged.set(String(a._id || a.id), a));
-          const result = Array.from(merged.values());
-          localStorage.setItem('campus_user_ads', JSON.stringify(result));
-          return result;
-        }
+        return resolveAllUserAds(user, Array.isArray(data) ? data : []);
       }
     }
   } catch (err) {
     console.warn('Backend my-ads unavailable, using local cache:', err);
   }
 
-  try {
-    return JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
-  } catch {
-    return [];
-  }
+  return resolveAllUserAds(user, []);
 }
 
 // Update status of product (active / sold)

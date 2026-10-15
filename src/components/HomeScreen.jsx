@@ -57,11 +57,24 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
         setLoadingProducts(true);
         const data = await fetchProducts(userUniversity);
         if (isMounted) {
-          setDbProducts(Array.isArray(data) ? data : []);
+          setDbProducts(prev => {
+            const map = new Map();
+            (prev || []).forEach(p => p && (p._id || p.id) && map.set(String(p._id || p.id), p));
+            try {
+              const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
+              if (Array.isArray(cached)) {
+                cached.forEach(p => p && (p._id || p.id) && map.set(String(p._id || p.id), p));
+              }
+            } catch {}
+            (userAds || []).forEach(a => a && (a._id || a.id) && map.set(String(a._id || a.id), a));
+            if (Array.isArray(data)) {
+              data.forEach(p => p && (p._id || p.id) && map.set(String(p._id || p.id), p));
+            }
+            return Array.from(map.values());
+          });
         }
       } catch (err) {
         console.warn('Could not fetch products:', err);
-        if (isMounted) setDbProducts([]);
       } finally {
         if (isMounted) {
           setLoadingProducts(false);
@@ -110,21 +123,36 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
   // Merge dbProducts and userAds dynamically, deduplicating by ID with userAds precedence
   const baseProducts = React.useMemo(() => {
     const map = new Map();
-    // 1. Populate database products first
+    // 1. Populate from local product cache first so local listings are immediately visible
+    try {
+      const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
+      if (Array.isArray(cached)) {
+        cached.forEach(p => {
+          if (p && (p._id || p.id)) map.set(String(p._id || p.id), p);
+        });
+      }
+    } catch {}
+
+    // 2. Overlay database products
     (dbProducts || []).forEach(p => {
-      const id = String(p._id || p.id);
-      map.set(id, p);
+      if (p && (p._id || p.id)) {
+        const id = String(p._id || p.id);
+        map.set(id, p);
+      }
     });
-    // 2. Overlay user ads (which contain latest user actions and optimistic status changes)
+
+    // 3. Overlay user ads (which contain latest user actions and optimistic status changes)
     (userAds || []).forEach(ad => {
-      const id = String(ad._id || ad.id);
-      const existing = map.get(id) || {};
-      map.set(id, {
-        ...existing,
-        ...ad,
-        sellerName: ad.sellerName || existing.sellerName || user?.fullName || 'You',
-        seller: ad.seller || existing.seller || { fullName: user?.fullName || 'You', isVerified: true }
-      });
+      if (ad && (ad._id || ad.id)) {
+        const id = String(ad._id || ad.id);
+        const existing = map.get(id) || {};
+        map.set(id, {
+          ...existing,
+          ...ad,
+          sellerName: ad.sellerName || existing.sellerName || user?.fullName || 'You',
+          seller: ad.seller || existing.seller || { fullName: user?.fullName || 'You', isVerified: true }
+        });
+      }
     });
 
     // Check localStorage cache for any items marked as sold

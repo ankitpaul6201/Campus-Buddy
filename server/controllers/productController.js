@@ -59,9 +59,27 @@ async function getProducts(req, res, next) {
       }
 
       const rawItems = await query;
-      const hasMore = rawItems.length > pageSize;
-      const items = hasMore ? rawItems.slice(0, pageSize) : rawItems;
-      const nextCursor = items.length > 0 ? items[items.length - 1]._id : null;
+      let hasMore = rawItems.length > pageSize;
+      let items = hasMore ? rawItems.slice(0, pageSize) : rawItems;
+      let nextCursor = items.length > 0 ? items[items.length - 1]._id : null;
+
+      // Fallback: If 0 items match the strict university filter, return all active products across campuses
+      if (items.length === 0 && uniQuery && !cursor && (!page || parseInt(page, 10) <= 1)) {
+        const fallbackFilter = { status: 'active' };
+        if (category && category !== 'all') fallbackFilter.category = category;
+        const fallbackItems = await Product.find(fallbackFilter)
+          .select('title description price category condition images seller campusName universityName location status createdAt')
+          .populate('seller', 'fullName avatar universityName isVerified email')
+          .sort({ createdAt: -1 })
+          .limit(pageSize)
+          .lean();
+
+        if (fallbackItems.length > 0) {
+          items = fallbackItems;
+          hasMore = false;
+          nextCursor = null;
+        }
+      }
 
       // If client explicitly requested paginated format
       if (format === 'paginated') {
