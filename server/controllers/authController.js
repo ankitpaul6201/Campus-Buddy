@@ -214,11 +214,44 @@ async function updatePassword(req, res, next) {
 }
 
 /**
+ * Request password reset code
+ */
+async function requestResetCode(req, res, next) {
+  try {
+    const { email } = req.body;
+    const resolvedEmail = (email || '').trim().toLowerCase();
+
+    if (!resolvedEmail) {
+      return res.status(400).json({ error: 'Please enter your registered email address' });
+    }
+
+    const user = await User.findOne({ email: resolvedEmail });
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with this email. Please check your email or sign up.' });
+    }
+
+    // Generate secure 6-digit verification code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetPasswordCode = code;
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000); // Valid for 15 minutes
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Verification code generated successfully',
+      code
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Reset password
  */
 async function resetPassword(req, res, next) {
   try {
-    const { email, newPassword } = req.body;
+    const { email, code, newPassword } = req.body;
     const resolvedEmail = (email || '').trim().toLowerCase();
 
     if (!resolvedEmail || !newPassword) {
@@ -233,11 +266,35 @@ async function resetPassword(req, res, next) {
       return res.status(404).json({ error: 'No account found with this email' });
     }
 
+    // Verify code if code was previously issued
+    if (user.resetPasswordCode && code) {
+      if (user.resetPasswordCode !== String(code).trim()) {
+        return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
+      }
+      if (user.resetPasswordExpires && user.resetPasswordExpires < new Date()) {
+        return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
+      }
+    }
+
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
+    user.resetPasswordCode = null;
+    user.resetPasswordExpires = null;
     await user.save();
 
-    res.json({ success: true, message: 'Password reset successfully' });
+    // Generate fresh JWT token for seamless auto-login
+    const token = jwt.sign(
+      { id: user._id, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Password reset successfully',
+      token,
+      user: formatUser(user)
+    });
   } catch (err) {
     next(err);
   }
@@ -310,6 +367,7 @@ module.exports = {
   getMe,
   updateUniversity,
   updatePassword,
+  requestResetCode,
   resetPassword,
   uploadStudentId,
   deleteAccount

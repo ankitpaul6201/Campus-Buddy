@@ -150,15 +150,32 @@ export async function apiUpdatePassword({ currentPassword, newPassword }) {
   return data;
 }
 
-// Reset password with email
-export async function apiResetPassword({ email, newPassword }) {
+// Request forgot password verification code
+export async function apiForgotPassword({ email }) {
+  const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to request verification code');
+  return data;
+}
+
+// Reset password with email & verification code
+export async function apiResetPassword({ email, code, newPassword }) {
   const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, newPassword }),
+    body: JSON.stringify({ email, code, newPassword }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Password reset failed');
+
+  if (data.token) {
+    setAuthToken(data.token);
+    localStorage.setItem('campus_user', JSON.stringify(data.user));
+  }
   return data;
 }
 

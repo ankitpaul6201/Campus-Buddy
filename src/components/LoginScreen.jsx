@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, KeyRound, Lock } from 'lucide-react';
-import { apiLogin, apiResetPassword, getStoredUser } from '../lib/api';
+import { apiLogin, apiForgotPassword, apiResetPassword, getStoredUser } from '../lib/api';
 
 export default function LoginScreen({ onNavigate, onLoginSuccess }) {
   const [identifier, setIdentifier] = useState('');
@@ -22,6 +22,8 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [serverOtp, setServerOtp] = useState('');
+  const [infoMsg, setInfoMsg] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -97,18 +99,25 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
   const handleForgotSendOtp = async (e) => {
     e.preventDefault();
     setError('');
+    setInfoMsg('');
 
-    if (!forgotEmail.trim() || !forgotEmail.includes('@')) {
+    const trimmedEmail = forgotEmail.trim().toLowerCase();
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
       setError('Please enter your valid college email address.');
       return;
     }
 
     setLoading(true);
     try {
-      // Advance to OTP entry step
+      const res = await apiForgotPassword({ email: trimmedEmail });
+      if (res.code) {
+        setServerOtp(String(res.code));
+        setForgotOtp(String(res.code));
+        setInfoMsg(`Verification code: ${res.code}`);
+      }
       setForgotStep('otp');
     } catch (err) {
-      setError('Failed to send reset code. Please try again.');
+      setError(err.message || 'No account found with this email. Please check and try again.');
     } finally {
       setLoading(false);
     }
@@ -119,11 +128,35 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     e.preventDefault();
     setError('');
 
-    if (forgotOtp.length < 4) {
-      setError('Please enter the code.');
+    if (forgotOtp.length < 6) {
+      setError('Please enter the 6-digit verification code.');
+      return;
+    }
+    if (serverOtp && forgotOtp.trim() !== serverOtp.trim()) {
+      setError('Invalid verification code. Please check and try again.');
       return;
     }
     setForgotStep('new_password');
+  };
+
+  const handleResendOtp = async () => {
+    setError('');
+    setInfoMsg('');
+    setLoading(true);
+    try {
+      const res = await apiForgotPassword({ email: forgotEmail.trim().toLowerCase() });
+      if (res.code) {
+        setServerOtp(String(res.code));
+        setForgotOtp(String(res.code));
+        setInfoMsg(`New verification code: ${res.code}`);
+      } else {
+        setInfoMsg('Verification code sent successfully.');
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to resend code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ─── Forgot Password: Step 3 - Set new password ───────────────────────
@@ -138,19 +171,22 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
 
     setLoading(true);
     try {
-      await apiResetPassword({
-        email: forgotEmail.trim(),
+      const res = await apiResetPassword({
+        email: forgotEmail.trim().toLowerCase(),
+        code: forgotOtp.trim(),
         newPassword,
       });
 
       setForgotSuccess(true);
       setTimeout(() => {
-        setForgotStep('none');
-        setForgotSuccess(false);
-        setForgotEmail('');
-        setForgotOtp('');
-        setNewPassword('');
-      }, 2000);
+        if (res.user && onLoginSuccess) {
+          onLoginSuccess(res.user);
+        } else if (onLoginSuccess) {
+          onLoginSuccess(getStoredUser());
+        } else {
+          onNavigate('main');
+        }
+      }, 1500);
     } catch (err) {
       setError(err.message || 'Failed to reset password. Please try again.');
     } finally {
@@ -163,6 +199,8 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     setForgotEmail('');
     setForgotOtp('');
     setNewPassword('');
+    setServerOtp('');
+    setInfoMsg('');
     setError('');
     setForgotSuccess(false);
   };
@@ -242,6 +280,21 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
             </div>
           )}
 
+          {infoMsg && (
+            <div className="p-3.5 rounded-xl bg-blue-50 text-[#1944F1] border border-blue-200 text-xs font-semibold flex items-center justify-between">
+              <span>{infoMsg}</span>
+              {serverOtp && forgotOtp !== serverOtp && (
+                <button
+                  type="button"
+                  onClick={() => setForgotOtp(serverOtp)}
+                  className="underline text-blue-700 font-bold ml-2 cursor-pointer"
+                >
+                  Auto-fill
+                </button>
+              )}
+            </div>
+          )}
+
           {forgotSuccess && (
             <div className="p-3.5 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs font-semibold">
               Password reset successfully! Signing you in...
@@ -293,30 +346,11 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
 
               <button
                 type="button"
-                onClick={async () => {
-                  setError('');
-                  try {
-                    const signInAttempt = await signIn.create({
-                      strategy: 'reset_password_email_code',
-                      identifier: forgotEmail.trim(),
-                    });
-                    const emailFactor = signInAttempt.supportedFirstFactors?.find(
-                      (f) => f.strategy === 'reset_password_email_code'
-                    );
-                    if (emailFactor?.emailAddressId) {
-                      await signIn.prepareFirstFactor({
-                        strategy: 'reset_password_email_code',
-                        emailAddressId: emailFactor.emailAddressId,
-                      });
-                    }
-                  } catch (err) {
-                    const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || '';
-                    setError(msg || 'Failed to resend code.');
-                  }
-                }}
-                className="w-full text-center text-xs font-semibold text-[#1944F1] hover:underline"
+                onClick={handleResendOtp}
+                disabled={loading}
+                className="w-full text-center text-xs font-semibold text-[#1944F1] hover:underline disabled:opacity-50"
               >
-                Didn't receive the code? Resend
+                {loading ? 'Sending code...' : "Didn't receive the code? Resend"}
               </button>
             </form>
           )}

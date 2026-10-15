@@ -29,6 +29,9 @@ router.put('/me/university', authMiddleware, authController.updateUniversity);
 // @route   PUT /api/auth/me/password
 router.put('/me/password', authMiddleware, authController.updatePassword);
 
+// @route   POST /api/auth/forgot-password (rate-limited)
+router.post('/forgot-password', authLimiter, authController.requestResetCode);
+
 // @route   POST /api/auth/reset-password (rate-limited)
 router.post('/reset-password', authLimiter, authController.resetPassword);
 
