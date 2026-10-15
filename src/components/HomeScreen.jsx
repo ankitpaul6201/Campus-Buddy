@@ -356,8 +356,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
             <h2 className="text-sm sm:text-base font-bold text-slate-900 font-sans leading-tight">
               Hi, {user?.fullName || user?.name || 'Student'}
             </h2>
-            <p className="text-xs text-slate-500 font-medium leading-tight mt-0.5 flex items-center gap-1">
-              <School className="w-3.5 h-3.5 text-[#1944F1] inline shrink-0" />
+            <p className="text-xs text-slate-500 font-medium leading-tight mt-0.5">
               <span>{user?.universityName || user?.university?.name || user?.campusName || 'Campus Member'}</span>
             </p>
           </div>

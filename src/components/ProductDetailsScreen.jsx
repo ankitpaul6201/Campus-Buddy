@@ -5,6 +5,7 @@ import {
   MapPin,
   CheckCircle2,
   MessageSquare,
+  Phone,
   Share2,
   ShieldCheck,
   Tag,
@@ -53,6 +54,7 @@ export default function ProductDetailsScreen({
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
   const [productStatus, setProductStatus] = useState(product?.status || 'active');
+  const [showCallModal, setShowCallModal] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportReason, setReportReason] = useState('Prohibited or dangerous item');
   const [reportDetails, setReportDetails] = useState('');
@@ -160,16 +162,16 @@ export default function ProductDetailsScreen({
   const sellerUniversity = sellerObj.universityName || product.universityName || product.campusName || 'Campus Member';
 
   // Check if current user is the seller
-  const currentUserId = user?.id || user?._id;
-  const sellerId = sellerObj._id || sellerObj.id || product.sellerId;
-  const currentUserName = (user?.fullName || user?.name || '').trim().toLowerCase();
-  const sellerNameNormalized = sellerName.trim().toLowerCase();
+  const currentUserId = String(user?.id || user?._id || '');
+  const currentUserEmail = (user?.email || '').toLowerCase().trim();
+  const sellerId = String(sellerObj?._id || sellerObj?.id || product.sellerId || (typeof product.seller === 'string' ? product.seller : '') || '');
+  const sellerEmail = (sellerObj?.email || product.sellerEmail || '').toLowerCase().trim();
 
+  // Strict check: current user is the owner ONLY if IDs/emails match or it is in their own userAds
   const isMyListing = Boolean(
-    (sellerId && currentUserId && String(sellerId) === String(currentUserId)) ||
-    product.sellerName === 'You' ||
-    (currentUserName && (currentUserName === sellerNameNormalized || sellerNameNormalized.includes(currentUserName) || currentUserName.includes(sellerNameNormalized))) ||
-    sellerNameNormalized === 'ankit'
+    (currentUserId && sellerId && currentUserId === sellerId) ||
+    (currentUserEmail && sellerEmail && currentUserEmail === sellerEmail) ||
+    (Array.isArray(userAds) && userAds.some(a => String(a._id || a.id) === String(productId)))
   );
 
   const targetSellerKey = sellerId || sellerNameNormalized || 'seller';
@@ -607,35 +609,127 @@ export default function ProductDetailsScreen({
               </button>
             )}
           </div>
+        ) : productStatus === 'sold' ? (
+          <div className="w-full py-3.5 px-4 rounded-2xl bg-slate-100 text-slate-500 font-medium text-xs flex items-center justify-center gap-2 select-none">
+            <CheckCircle2 className="w-4 h-4 text-slate-400 shrink-0" />
+            <span>This item has been sold</span>
+          </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => {
-              const targetSellerId = sellerId || ('seller_' + productId);
-              const productTitle = product.title || 'Campus Item';
-              const priceText = formatRupeePrice(product.price);
-              const imageUrl = currentImage;
-              const avatar = resolvedSellerAvatar || sellerInitial;
+          <div className="w-full flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                const phoneNumber = product.phone || product.contactNumber || sellerObj.phone;
+                if (phoneNumber) {
+                  window.location.href = `tel:${phoneNumber}`;
+                } else {
+                  setShowCallModal(true);
+                }
+              }}
+              className="py-3.5 px-5 rounded-2xl bg-[#F0FDF4] hover:bg-[#DCFCE7] text-emerald-700 border border-emerald-200 font-bold text-xs shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2 shrink-0"
+              title="Call Seller"
+            >
+              <Phone className="w-4 h-4 text-emerald-600" />
+              <span>Call</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const targetSellerId = sellerId || ('seller_' + productId);
+                const productTitle = product.title || 'Campus Item';
+                const priceText = formatRupeePrice(product.price);
+                const imageUrl = currentImage;
+                const avatar = resolvedSellerAvatar || sellerInitial;
 
-              if (onOpenChat) {
-                onOpenChat({
-                  sellerId: targetSellerId,
-                  productId: productId,
-                  sellerName: sellerName,
-                  productTitle: productTitle,
-                  price: priceText,
-                  image: imageUrl,
-                  avatar: avatar
-                });
-              }
-            }}
-            className="w-full py-4 px-5 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-          >
-            <MessageSquare className="w-4.5 h-4.5" />
-            <span>Chat with Seller</span>
-          </button>
+                if (onOpenChat) {
+                  onOpenChat({
+                    sellerId: targetSellerId,
+                    productId: productId,
+                    sellerName: sellerName,
+                    productTitle: productTitle,
+                    price: priceText,
+                    image: imageUrl,
+                    avatar: avatar
+                  });
+                }
+              }}
+              className="flex-1 py-3.5 px-5 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Chat with Seller</span>
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Call Seller Modal if no direct number */}
+      <AnimatePresence>
+        {showCallModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowCallModal(false)}
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl border border-slate-100"
+            >
+              <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center">
+                <Phone className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-900">Contact {sellerName}</h3>
+                <p className="text-xs text-slate-500">
+                  {product.phone || product.contactNumber || sellerObj.phone
+                    ? `Phone: ${product.phone || product.contactNumber || sellerObj.phone}`
+                    : `Direct phone number is private. You can chat directly with ${sellerName} inside Campus Buddy.`}
+                </p>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCallModal(false)}
+                  className="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-700 font-semibold text-xs hover:bg-slate-200 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCallModal(false);
+                    const targetSellerId = sellerId || ('seller_' + productId);
+                    const productTitle = product.title || 'Campus Item';
+                    const priceText = formatRupeePrice(product.price);
+                    const imageUrl = currentImage;
+                    const avatar = resolvedSellerAvatar || sellerInitial;
+
+                    if (onOpenChat) {
+                      onOpenChat({
+                        sellerId: targetSellerId,
+                        productId: productId,
+                        sellerName: sellerName,
+                        productTitle: productTitle,
+                        price: priceText,
+                        image: imageUrl,
+                        avatar: avatar
+                      });
+                    }
+                  }}
+                  className="flex-1 py-3 rounded-2xl bg-[#1944F1] text-white font-semibold text-xs hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Chat Now</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Toast notification for sharing */}
       <AnimatePresence>

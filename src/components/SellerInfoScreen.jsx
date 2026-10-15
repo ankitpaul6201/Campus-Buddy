@@ -57,16 +57,18 @@ export default function SellerInfoScreen({
   const sellerInitial = sellerName.charAt(0).toUpperCase();
   const sellerUniversity = sellerObj.sellerUniversity || sellerObj.universityName || product?.universityName || product?.campusName || 'Campus Member';
 
-  const currentUserId = user?.id || user?._id;
-  const currentUserName = (user?.fullName || user?.name || '').trim().toLowerCase();
+  const currentUserId = String(user?.id || user?._id || '');
+  const currentUserEmail = (user?.email || '').toLowerCase().trim();
+  const sellerId = String(sellerObj.sellerId || sellerObj._id || sellerObj.id || product?.sellerId || '');
+  const sellerEmail = (sellerObj.email || product?.sellerEmail || '').toLowerCase().trim();
   const sellerNameNormalized = sellerName.trim().toLowerCase();
 
   const isMyListing = Boolean(
     sellerObj.isMyListing ?? (
-      (sellerObj.sellerId && currentUserId && String(sellerObj.sellerId) === String(currentUserId)) ||
-      product?.sellerName === 'You' ||
-      (currentUserName && (currentUserName === sellerNameNormalized || sellerNameNormalized.includes(currentUserName) || currentUserName.includes(sellerNameNormalized))) ||
-      sellerNameNormalized === 'ankit'
+      (sellerId && currentUserId && sellerId === currentUserId) ||
+      (currentUserEmail && sellerEmail && currentUserEmail === sellerEmail) ||
+      (Array.isArray(userAds) && product && userAds.some(a => String(a._id || a.id) === String(product._id || product.id))) ||
+      product?.sellerName === 'You'
     )
   );
 
