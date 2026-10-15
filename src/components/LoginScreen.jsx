@@ -22,6 +22,7 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [isOtpResent, setIsOtpResent] = useState(false);
   const [infoMsg, setInfoMsg] = useState('');
 
   const handleSubmit = async (e) => {
@@ -106,6 +107,7 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
       return;
     }
 
+    setIsOtpResent(false);
     setLoading(true);
     try {
       const res = await apiForgotPassword({ email: trimmedEmail });
@@ -152,6 +154,7 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
   };
 
   const handleResendOtp = async () => {
+    setIsOtpResent(false);
     setError('');
     setInfoMsg('');
     setLoading(true);
@@ -159,11 +162,10 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
       const res = await apiForgotPassword({ email: forgotEmail.trim().toLowerCase() });
       if (res?.devCode) {
         setForgotOtp(res.devCode);
-        setInfoMsg(res.message || `Dev Mode: New OTP is ${res.devCode}`);
       } else {
         setForgotOtp('');
-        setInfoMsg(res?.message || 'A new verification code has been sent to your email.');
       }
+      setIsOtpResent(true);
     } catch (err) {
       setError(err.message || 'Failed to resend code. Please try again.');
     } finally {
@@ -214,6 +216,7 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     setInfoMsg('');
     setError('');
     setForgotSuccess(false);
+    setIsOtpResent(false);
   };
 
   // ─── Forgot Password Screens ──────────────────────────────────────────
@@ -226,7 +229,9 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
       },
       otp: {
         title: 'Enter Verification Code',
-        subtitle: `We've sent a 6-digit code to ${forgotEmail}. Enter it below to verify your identity.`,
+        subtitle: isOtpResent
+          ? `A new 6-digit verification code has been sent to ${forgotEmail}. Please check your inbox and spam folder.`
+          : `We've sent a 6-digit code to ${forgotEmail}. Enter it below to verify your identity.`,
         icon: KeyRound,
       },
       new_password: {
@@ -288,12 +293,6 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
           {error && (
             <div className="p-3.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-xs font-normal">
               {error}
-            </div>
-          )}
-
-          {infoMsg && (
-            <div className="p-3.5 rounded-xl bg-blue-50 text-[#1944F1] border border-blue-200 text-xs font-medium leading-relaxed">
-              {infoMsg}
             </div>
           )}
 
