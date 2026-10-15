@@ -5,11 +5,7 @@ const nodemailer = require('nodemailer');
  * Supports Gmail SMTP (App Password), custom SMTP, and Resend
  */
 
-let cachedTransporter = null;
-
 function getTransporter() {
-  if (cachedTransporter) return cachedTransporter;
-
   const user = (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim();
   const rawPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || '').trim();
   // Strip all whitespace from App Password (e.g. Google presents "xxxx xxxx xxxx xxxx")
@@ -18,42 +14,25 @@ function getTransporter() {
   if (user && pass) {
     // If Gmail is configured
     if (user.toLowerCase().includes('@gmail.com') || process.env.SMTP_SERVICE === 'gmail') {
-      cachedTransporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        pool: true, // Keep persistent SMTP connection pool alive
-        maxConnections: 3,
-        maxMessages: 100,
-        family: 4, // Force IPv4 to eliminate multi-second IPv6 fallback latency
+      return nodemailer.createTransport({
+        service: 'gmail',
         auth: { user, pass },
         tls: {
           rejectUnauthorized: false
-        },
-        connectionTimeout: 8000,
-        greetingTimeout: 8000,
-        socketTimeout: 10000
+        }
       });
-      return cachedTransporter;
     }
 
     // Generic SMTP host
-    cachedTransporter = nodemailer.createTransport({
+    return nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT || '587', 10),
       secure: process.env.SMTP_PORT == '465',
-      pool: true,
-      maxConnections: 3,
-      family: 4,
       auth: { user, pass },
       tls: {
         rejectUnauthorized: false
-      },
-      connectionTimeout: 8000,
-      greetingTimeout: 8000,
-      socketTimeout: 10000
+      }
     });
-    return cachedTransporter;
   }
 
   return null;

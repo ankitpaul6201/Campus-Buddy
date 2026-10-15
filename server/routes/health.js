@@ -15,6 +15,20 @@ router.get('/', (req, res) => {
   });
 });
 
+// Diagnostic check to verify if email environment variables are loaded on Render
+router.get('/email-status', (req, res) => {
+  const user = process.env.EMAIL_USER || process.env.SMTP_USER || '';
+  const pass = process.env.EMAIL_PASS || process.env.SMTP_PASS || '';
+  const resend = process.env.RESEND_API_KEY || '';
+
+  res.json({
+    emailConfigured: Boolean(user && pass),
+    emailUser: user ? user.slice(0, 3) + '***@' + user.split('@')[1] : null,
+    hasPassword: Boolean(pass),
+    hasResend: Boolean(resend)
+  });
+});
+
 // Readiness check (verifies database connectivity)
 router.get('/ready', (req, res) => {
   const ready = db.isReady();
