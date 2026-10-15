@@ -5,29 +5,67 @@ const nodemailer = require('nodemailer');
  * Supports Gmail SMTP (App Password), custom SMTP, and Resend
  */
 
+let cachedTransporter = null;
+
 function getTransporter() {
-  const user = process.env.EMAIL_USER || process.env.SMTP_USER;
-  const pass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
+  if (cachedTransporter) return cachedTransporter;
+
+  const user = (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim();
+  const rawPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || '').trim();
+  // Strip all whitespace from App Password (e.g. Google presents "xxxx xxxx xxxx xxxx")
+  const pass = rawPass.replace(/\s+/g, '');
 
   if (user && pass) {
     // If Gmail is configured
-    if (user.includes('@gmail.com') || process.env.SMTP_SERVICE === 'gmail') {
-      return nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user, pass }
+    if (user.toLowerCase().includes('@gmail.com') || process.env.SMTP_SERVICE === 'gmail') {
+      cachedTransporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        pool: true, // Keep persistent SMTP connection pool alive
+        maxConnections: 3,
+        maxMessages: 100,
+        family: 4, // Force IPv4 to eliminate multi-second IPv6 fallback latency
+        auth: { user, pass },
+        tls: {
+          rejectUnauthorized: false
+        },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 10000
       });
+      return cachedTransporter;
     }
 
     // Generic SMTP host
-    return nodemailer.createTransport({
+    cachedTransporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT || '587', 10),
       secure: process.env.SMTP_PORT == '465',
-      auth: { user, pass }
+      pool: true,
+      maxConnections: 3,
+      family: 4,
+      auth: { user, pass },
+      tls: {
+        rejectUnauthorized: false
+      },
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 10000
     });
+    return cachedTransporter;
   }
 
   return null;
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 /**
@@ -36,7 +74,8 @@ function getTransporter() {
 async function sendVerificationCode({ to, code, name }) {
   const transporter = getTransporter();
 
-  const recipientName = name || 'Student';
+  const recipientName = escapeHtml(name || 'Student');
+  const safeCode = escapeHtml(code);
   const htmlContent = `
     <!DOCTYPE html>
     <html>
@@ -63,7 +102,7 @@ async function sendVerificationCode({ to, code, name }) {
             <p class="subtitle">Hi ${recipientName}, we received a request to reset your password. Use the verification code below to proceed.</p>
           </div>
           <div class="code-box">
-            <div class="code-text">${code}</div>
+            <div class="code-text">${safeCode}</div>
             <div class="expires-text">Valid for 15 minutes</div>
           </div>
           <p style="font-size: 13px; color: #64748B; line-height: 1.6; text-align: center;">
@@ -78,44 +117,73 @@ async function sendVerificationCode({ to, code, name }) {
   `;
 
   if (transporter) {
-    const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'no-reply@campusbuddy.app';
-    const info = await transporter.sendMail({
-      from: `"Campus Buddy" <${fromAddress}>`,
-      to,
-      subject: `${code} is your Campus Buddy verification code`,
-      text: `Your Campus Buddy password reset code is: ${code}. This code is valid for 15 minutes.`,
-      html: htmlContent
-    });
-    console.log(`[EmailService] Verification email delivered to ${to} (Message ID: ${info.messageId})`);
-    return { success: true, messageId: info.messageId };
+    const senderUser = (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim();
+    const fromAddress = process.env.EMAIL_FROM || `"Campus Buddy" <${senderUser}>`;
+
+    try {
+      const info = await transporter.sendMail({
+        from: fromAddress,
+        to,
+        subject: `${code} is your Campus Buddy verification code`,
+        text: `Your Campus Buddy password reset code is: ${code}. This code is valid for 15 minutes.`,
+        html: htmlContent
+      });
+      console.log(`[EmailService] Verification email delivered to ${to} (Message ID: ${info.messageId})`);
+      return { success: true, delivered: true, messageId: info.messageId };
+    } catch (err) {
+      console.error('[EmailService] SMTP delivery error:', err.message);
+      if (err.code === 'EAUTH' || (err.response && err.response.includes('535'))) {
+        throw new Error('Gmail authentication failed. Please check your EMAIL_USER and EMAIL_PASS (use a 16-character Google App Password).');
+      }
+      throw new Error(`Email delivery failed: ${err.message}`);
+    }
   }
 
   // Fallback: If RESEND_API_KEY is available
   if (process.env.RESEND_API_KEY) {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: process.env.EMAIL_FROM || 'Campus Buddy <onboarding@resend.dev>',
-        to: [to],
-        subject: `${code} is your Campus Buddy verification code`,
-        html: htmlContent
-      })
-    });
-    const resData = await res.json();
-    if (res.ok) {
-      console.log(`[EmailService] Verification email delivered via Resend to ${to} (ID: ${resData.id})`);
-      return { success: true, messageId: resData.id };
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.EMAIL_FROM || 'Campus Buddy <onboarding@resend.dev>',
+          to: [to],
+          subject: `${code} is your Campus Buddy verification code`,
+          html: htmlContent
+        })
+      });
+      const resData = await res.json();
+      if (res.ok) {
+        console.log(`[EmailService] Verification email delivered via Resend to ${to} (ID: ${resData.id})`);
+        return { success: true, delivered: true, messageId: resData.id };
+      }
+      console.warn('[EmailService] Resend API error:', resData);
+      throw new Error(resData.message || 'Email delivery failed via Resend');
+    } catch (resendErr) {
+      throw new Error(`Resend delivery failed: ${resendErr.message}`);
     }
-    console.warn('[EmailService] Resend API error:', resData);
-    throw new Error(resData.message || 'Email delivery failed via Resend');
   }
 
   // If no email credentials configured in environment
-  console.warn('[EmailService] Neither EMAIL_USER/EMAIL_PASS nor RESEND_API_KEY is configured in environment.');
+  const isProduction = process.env.NODE_ENV === 'production';
+  console.log('================================================================');
+  console.log('⚠️  [EmailService] Neither EMAIL_USER nor RESEND_API_KEY is configured in .env');
+  console.log(`🔑 PASSWORD RESET OTP for ${to}: [ ${code} ]`);
+  console.log('👉 Valid for 15 minutes.');
+  console.log('👉 To enable real email delivery, add EMAIL_USER and EMAIL_PASS to server/.env');
+  console.log('================================================================');
+
+  if (!isProduction) {
+    return {
+      success: true,
+      delivered: false,
+      isDevMode: true
+    };
+  }
+
   throw new Error('Email service is not configured. Please set EMAIL_USER and EMAIL_PASS (Gmail App Password) in your server environment.');
 }
 

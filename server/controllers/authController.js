@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cloudinary = require('cloudinary').v2;
@@ -5,6 +6,16 @@ const User = require('../models/User');
 const emailService = require('../services/emailService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'campus_buddy_super_secret_jwt_key_2026_token_auth';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Timing-safe string comparison to protect against side-channel timing attacks
+function safeCompare(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 // Helper to format user payload
 const formatUser = (user) => ({
@@ -36,21 +47,25 @@ async function signup(req, res, next) {
       avatar
     } = req.body;
 
-    const resolvedName = (name || fullName || '').trim();
-    const resolvedEmail = (email || '').trim().toLowerCase();
-
-    if (!resolvedName) {
-      return res.status(400).json({ error: 'Full name is required' });
+    if (typeof (name || fullName) !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Invalid input format' });
     }
-    if (!resolvedEmail || !resolvedEmail.includes('@')) {
+
+    const resolvedName = (name || fullName || '').trim();
+    const resolvedEmail = email.trim().toLowerCase();
+
+    if (!resolvedName || resolvedName.length > 100) {
+      return res.status(400).json({ error: 'Valid full name is required (max 100 characters)' });
+    }
+    if (!resolvedEmail || !EMAIL_REGEX.test(resolvedEmail) || resolvedEmail.length > 254) {
       return res.status(400).json({ error: 'Valid college email is required' });
     }
-    if (!password || password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    if (password.length < 8 || password.length > 128) {
+      return res.status(400).json({ error: 'Password must be between 8 and 128 characters' });
     }
 
     // Check if user already exists in MongoDB
-    const existingUser = await User.findOne({ email: resolvedEmail }).select('_id').lean();
+    const existingUser = await User.findOne({ email: String(resolvedEmail) }).select('_id').lean();
     if (existingUser) {
       return res.status(400).json({ error: 'An account with this email already exists. Please sign in.' });
     }
@@ -64,10 +79,10 @@ async function signup(req, res, next) {
       fullName: resolvedName,
       email: resolvedEmail,
       password: hashedPassword,
-      universityName: universityName || 'Campus Member',
-      studentIdUrl: studentIdUrl || '',
+      universityName: typeof universityName === 'string' ? universityName.trim().slice(0, 100) : 'Campus Member',
+      studentIdUrl: typeof studentIdUrl === 'string' ? studentIdUrl.trim() : '',
       isVerified: Boolean(isVerified),
-      avatar: avatar || '/avatar.svg',
+      avatar: typeof avatar === 'string' ? avatar.trim() : '/avatar.svg',
     });
 
     await user.save();
@@ -95,14 +110,19 @@ async function signup(req, res, next) {
 async function login(req, res, next) {
   try {
     const { identifier, email, password } = req.body;
-    const resolvedEmail = (identifier || email || '').trim().toLowerCase();
+    const rawEmail = identifier || email;
 
-    if (!resolvedEmail || !password) {
+    if (typeof rawEmail !== 'string' || typeof password !== 'string') {
       return res.status(400).json({ error: 'Please enter your email and password' });
     }
 
-    // Find user in MongoDB Atlas with lean query
-    const user = await User.findOne({ email: resolvedEmail }).lean();
+    const resolvedEmail = rawEmail.trim().toLowerCase();
+    if (!resolvedEmail || !password || password.length > 128) {
+      return res.status(400).json({ error: 'Please enter your email and password' });
+    }
+
+    // Find user in MongoDB Atlas with safe string casting
+    const user = await User.findOne({ email: String(resolvedEmail) }).lean();
     if (!user) {
       return res.status(400).json({ error: 'No account found with this email. Please sign up first.' });
     }
@@ -220,36 +240,38 @@ async function updatePassword(req, res, next) {
 async function requestResetCode(req, res, next) {
   try {
     const { email } = req.body;
-    const resolvedEmail = (email || '').trim().toLowerCase();
-
-    if (!resolvedEmail) {
-      return res.status(400).json({ error: 'Please enter your registered email address' });
+    if (typeof email !== 'string') {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
-    const user = await User.findOne({ email: resolvedEmail });
+    const resolvedEmail = email.trim().toLowerCase();
+    if (!resolvedEmail || !EMAIL_REGEX.test(resolvedEmail) || resolvedEmail.length > 254) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    // Cast explicitly to primitive string to prevent NoSQL query operator injection
+    const user = await User.findOne({ email: String(resolvedEmail) });
     if (!user) {
       return res.status(404).json({ error: 'No account found with this email. Please check your email or sign up.' });
     }
 
-    // Generate secure 6-digit verification code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate cryptographically secure 6-digit verification code
+    const code = crypto.randomInt(100000, 1000000).toString();
     user.resetPasswordCode = code;
     user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000); // Valid for 15 minutes
+    user.resetPasswordAttempts = 0; // Reset attempts counter
     await user.save();
 
-    // Send code strictly to the user's email inbox
-    try {
-      await emailService.sendVerificationCode({
-        to: resolvedEmail,
-        code,
-        name: user.fullName || user.name
-      });
-    } catch (emailErr) {
-      console.error('[authController] Failed to send verification email:', emailErr.message);
-      return res.status(500).json({
-        error: emailErr.message || 'Failed to send verification code to your email. Please contact support.'
-      });
-    }
+    // Send code to the user's email inbox asynchronously so the HTTP response returns immediately (<100ms)
+    emailService.sendVerificationCode({
+      to: resolvedEmail,
+      code,
+      name: user.fullName || user.name
+    }).then(res => {
+      console.log(`[authController] Verification code delivered to ${resolvedEmail}`);
+    }).catch(emailErr => {
+      console.error('[authController] Background verification email delivery failed:', emailErr.message);
+    });
 
     res.json({
       success: true,
@@ -266,24 +288,54 @@ async function requestResetCode(req, res, next) {
 async function verifyResetCode(req, res, next) {
   try {
     const { email, code } = req.body;
-    const resolvedEmail = (email || '').trim().toLowerCase();
-    const resolvedCode = (code || '').trim();
-
-    if (!resolvedEmail || !resolvedCode) {
+    if (typeof email !== 'string' || typeof code !== 'string') {
       return res.status(400).json({ error: 'Email and verification code are required' });
     }
 
-    const user = await User.findOne({ email: resolvedEmail });
+    const resolvedEmail = email.trim().toLowerCase();
+    const resolvedCode = code.trim();
+
+    if (!resolvedEmail || !EMAIL_REGEX.test(resolvedEmail)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+
+    if (!/^\d{6}$/.test(resolvedCode)) {
+      return res.status(400).json({ error: 'Verification code must be exactly 6 digits' });
+    }
+
+    const user = await User.findOne({ email: String(resolvedEmail) });
     if (!user) {
       return res.status(404).json({ error: 'No account found with this email' });
     }
 
-    if (!user.resetPasswordCode || user.resetPasswordCode !== resolvedCode) {
-      return res.status(400).json({ error: 'Invalid verification code. Please check your email and try again.' });
+    // Check expiry first
+    if (!user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
+      user.resetPasswordCode = null;
+      user.resetPasswordExpires = null;
+      user.resetPasswordAttempts = 0;
+      await user.save();
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
     }
 
-    if (user.resetPasswordExpires && user.resetPasswordExpires < new Date()) {
-      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
+    // Rate-limit brute force attempts per OTP (max 5 failed attempts)
+    if ((user.resetPasswordAttempts || 0) >= 5) {
+      user.resetPasswordCode = null;
+      user.resetPasswordExpires = null;
+      user.resetPasswordAttempts = 0;
+      await user.save();
+      return res.status(429).json({ error: 'Too many incorrect attempts. For security, this verification code has been invalidated. Please request a new code.' });
+    }
+
+    // Timing-safe comparison to prevent timing attacks
+    if (!user.resetPasswordCode || !safeCompare(user.resetPasswordCode, resolvedCode)) {
+      user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1;
+      await user.save();
+      const attemptsLeft = Math.max(0, 5 - user.resetPasswordAttempts);
+      return res.status(400).json({
+        error: attemptsLeft > 0
+          ? `Invalid verification code. ${attemptsLeft} attempt(s) remaining.`
+          : 'Too many incorrect attempts. This code has been invalidated. Please request a new one.'
+      });
     }
 
     res.json({ success: true, message: 'Verification code verified successfully' });
@@ -298,32 +350,64 @@ async function verifyResetCode(req, res, next) {
 async function resetPassword(req, res, next) {
   try {
     const { email, code, newPassword } = req.body;
-    const resolvedEmail = (email || '').trim().toLowerCase();
-    const resolvedCode = (code || '').trim();
-
-    if (!resolvedEmail || !newPassword || !resolvedCode) {
+    if (typeof email !== 'string' || typeof code !== 'string' || typeof newPassword !== 'string') {
       return res.status(400).json({ error: 'Email, verification code, and new password are required' });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+
+    const resolvedEmail = email.trim().toLowerCase();
+    const resolvedCode = code.trim();
+
+    if (!resolvedEmail || !EMAIL_REGEX.test(resolvedEmail)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+    if (!/^\d{6}$/.test(resolvedCode)) {
+      return res.status(400).json({ error: 'Verification code must be exactly 6 digits' });
+    }
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({ error: 'Password must be between 8 and 128 characters' });
     }
 
-    const user = await User.findOne({ email: resolvedEmail });
+    const user = await User.findOne({ email: String(resolvedEmail) });
     if (!user) {
       return res.status(404).json({ error: 'No account found with this email' });
     }
 
-    if (!user.resetPasswordCode || user.resetPasswordCode !== resolvedCode) {
-      return res.status(400).json({ error: 'Invalid verification code. Please check your email and try again.' });
-    }
-    if (user.resetPasswordExpires && user.resetPasswordExpires < new Date()) {
+    // Check expiry
+    if (!user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
+      user.resetPasswordCode = null;
+      user.resetPasswordExpires = null;
+      user.resetPasswordAttempts = 0;
+      await user.save();
       return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
+    }
+
+    // Check attempt limits
+    if ((user.resetPasswordAttempts || 0) >= 5) {
+      user.resetPasswordCode = null;
+      user.resetPasswordExpires = null;
+      user.resetPasswordAttempts = 0;
+      await user.save();
+      return res.status(429).json({ error: 'Too many incorrect attempts. For security, this verification code has been invalidated. Please request a new code.' });
+    }
+
+    // Timing-safe compare
+    if (!user.resetPasswordCode || !safeCompare(user.resetPasswordCode, resolvedCode)) {
+      user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1;
+      await user.save();
+      const attemptsLeft = Math.max(0, 5 - user.resetPasswordAttempts);
+      return res.status(400).json({
+        error: attemptsLeft > 0
+          ? `Invalid verification code. ${attemptsLeft} attempt(s) remaining.`
+          : 'Too many incorrect attempts. This code has been invalidated. Please request a new one.'
+      });
     }
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
+    // Purge reset credentials
     user.resetPasswordCode = null;
     user.resetPasswordExpires = null;
+    user.resetPasswordAttempts = 0;
     await user.save();
 
     // Generate fresh JWT token for seamless auto-login

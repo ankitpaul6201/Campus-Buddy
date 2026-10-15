@@ -102,15 +102,20 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
 
     const trimmedEmail = forgotEmail.trim().toLowerCase();
     if (!trimmedEmail || !trimmedEmail.includes('@')) {
-      setError('Please enter your valid college email address.');
+      setError('Please enter your valid email address.');
       return;
     }
 
     setLoading(true);
     try {
-      await apiForgotPassword({ email: trimmedEmail });
-      setForgotOtp('');
-      setInfoMsg(`A 6-digit verification code has been sent to ${trimmedEmail}. Please check your email inbox and spam folder.`);
+      const res = await apiForgotPassword({ email: trimmedEmail });
+      if (res?.devCode) {
+        setForgotOtp(res.devCode);
+        setInfoMsg(res.message || `Dev Mode: Your OTP is ${res.devCode} (No email service configured)`);
+      } else {
+        setForgotOtp('');
+        setInfoMsg('');
+      }
       setForgotStep('otp');
     } catch (err) {
       setError(err.message || 'No account found with this email. Please check and try again.');
@@ -151,9 +156,14 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     setInfoMsg('');
     setLoading(true);
     try {
-      await apiForgotPassword({ email: forgotEmail.trim().toLowerCase() });
-      setForgotOtp('');
-      setInfoMsg('A new verification code has been sent to your email.');
+      const res = await apiForgotPassword({ email: forgotEmail.trim().toLowerCase() });
+      if (res?.devCode) {
+        setForgotOtp(res.devCode);
+        setInfoMsg(res.message || `Dev Mode: New OTP is ${res.devCode}`);
+      } else {
+        setForgotOtp('');
+        setInfoMsg(res?.message || 'A new verification code has been sent to your email.');
+      }
     } catch (err) {
       setError(err.message || 'Failed to resend code. Please try again.');
     } finally {
@@ -300,7 +310,7 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
                 type="email"
                 value={forgotEmail}
                 onChange={(e) => setForgotEmail(e.target.value)}
-                placeholder="Your college email"
+                placeholder="Your email"
                 autoFocus
                 autoComplete="email"
                 className="w-full px-5 py-4 bg-white text-slate-900 placeholder-slate-400 rounded-2xl text-base font-normal border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1944F1] focus:border-transparent transition-all"
