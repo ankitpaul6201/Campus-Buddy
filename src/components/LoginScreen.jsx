@@ -111,12 +111,10 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     setLoading(true);
     try {
       const res = await apiForgotPassword({ email: trimmedEmail });
-      if (res?.devCode) {
-        setForgotOtp(res.devCode);
-        setInfoMsg(res.message || `Dev Mode: Your OTP is ${res.devCode} (No email service configured)`);
+      if (res?.code || res?.devCode) {
+        setForgotOtp(String(res.code || res.devCode));
       } else {
         setForgotOtp('');
-        setInfoMsg('');
       }
       setForgotStep('otp');
     } catch (err) {
@@ -160,8 +158,8 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     setLoading(true);
     try {
       const res = await apiForgotPassword({ email: forgotEmail.trim().toLowerCase() });
-      if (res?.devCode) {
-        setForgotOtp(res.devCode);
+      if (res?.code || res?.devCode) {
+        setForgotOtp(String(res.code || res.devCode));
       } else {
         setForgotOtp('');
       }

@@ -20,9 +20,9 @@ function getTransporter() {
         tls: {
           rejectUnauthorized: false
         },
-        connectionTimeout: 5000,
-        greetingTimeout: 5000,
-        socketTimeout: 5000
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 20000
       });
     }
 
@@ -35,9 +35,9 @@ function getTransporter() {
       tls: {
         rejectUnauthorized: false
       },
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 5000
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000
     });
   }
 
@@ -105,6 +105,12 @@ async function sendVerificationCode({ to, code, name }) {
   // This completely avoids cloud firewall port-blocking (e.g. Render Free Tier blocks SMTP ports 465/587)
   if (process.env.RESEND_API_KEY) {
     try {
+      const customFrom = (process.env.RESEND_FROM || process.env.EMAIL_FROM || '').trim();
+      // Resend forbids sending from @gmail.com unless domain is verified; fall back to official onboarding sender
+      const resendFrom = (customFrom && !customFrom.toLowerCase().includes('@gmail.com'))
+        ? customFrom
+        : 'Campus Buddy <onboarding@resend.dev>';
+
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -112,7 +118,7 @@ async function sendVerificationCode({ to, code, name }) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'Campus Buddy <onboarding@resend.dev>',
+          from: resendFrom,
           to: [to],
           subject: `${code} is your Campus Buddy verification code`,
           html: htmlContent
