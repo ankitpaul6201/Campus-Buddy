@@ -404,11 +404,6 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
             >
               <path d="M3 8L15 8M15 8C15 9.65686 16.3431 11 18 11C19.6569 11 21 9.65685 21 8C21 6.34315 19.6569 5 18 5C16.3431 5 15 6.34315 15 8ZM9 16L21 16M9 16C9 17.6569 7.65685 19 6 19C4.34315 19 3 17.6569 3 16C3 14.3431 4.34315 13 6 13C7.65685 13 9 14.3431 9 16Z" />
             </svg>
-            {activeFilterCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] font-extrabold flex items-center justify-center border-2 border-white shadow-xs">
-                {activeFilterCount}
-              </span>
-            )}
           </button>
         </div>
 
@@ -661,11 +656,6 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                 <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 top-2.5" />
                 <div className="flex items-center gap-2 pt-2">
                   <h3 className="text-base font-bold text-slate-900 font-sans">Filter & Sort</h3>
-                  {activeFilterCount > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#1944F1] border border-blue-100">
-                      {activeFilterCount} active
-                    </span>
-                  )}
                 </div>
                 <button
                   onClick={() => setIsFilterModalOpen(false)}
@@ -856,7 +846,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                   className="flex-[2] py-3 px-4 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white font-light text-xs shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Show Results ({filteredProducts.length})</span>
+                  <span>Show Results</span>
                 </button>
               </div>
             </motion.div>
