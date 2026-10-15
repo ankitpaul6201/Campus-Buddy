@@ -39,7 +39,7 @@ import {
 } from '../lib/api';
 
 export default function ProductDetailsScreen({
-  product,
+  product = {},
   user,
   favorites = [],
   setFavorites,
@@ -50,10 +50,19 @@ export default function ProductDetailsScreen({
   onManageMyAds,
   onViewSellerInfo
 }) {
+  const safeProduct = product || {};
+  const productId = safeProduct._id || safeProduct.id;
+  const isFav = (favorites || []).some(id => String(id) === String(productId));
+
+  // Extract all photos
+  const rawImages = (Array.isArray(safeProduct.images) && safeProduct.images.length > 0)
+    ? safeProduct.images
+    : (safeProduct.image ? [safeProduct.image] : ['https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=800&q=80']);
+
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
-  const [productStatus, setProductStatus] = useState(product?.status || 'active');
+  const [productStatus, setProductStatus] = useState(safeProduct?.status || 'active');
   const [showCallModal, setShowCallModal] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportReason, setReportReason] = useState('Prohibited or dangerous item');
@@ -61,69 +70,37 @@ export default function ProductDetailsScreen({
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [reportSuccess, setReportSuccess] = useState(false);
 
-  const handleReportSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmittingReport(true);
-    try {
-      await apiReportProduct(productId, { reason: reportReason, details: reportDetails });
-      setReportSuccess(true);
-      setTimeout(() => {
-        setIsReportModalOpen(false);
-        setReportSuccess(false);
-        setReportDetails('');
-      }, 2000);
-    } catch (err) {
-      alert(err.message || 'Failed to submit report');
-    } finally {
-      setIsSubmittingReport(false);
-    }
-  };
+  // Extract seller information
+  const sellerObj = (typeof safeProduct.seller === 'object' && safeProduct.seller !== null) ? safeProduct.seller : {};
+  const sellerName = sellerObj.fullName || safeProduct.sellerName || (typeof safeProduct.seller === 'string' ? safeProduct.seller : 'Campus Student');
+  const sellerNameNormalized = (sellerName || '').trim().toLowerCase();
+  const sellerInitial = (sellerName || 'S').charAt(0).toUpperCase();
+  const isSellerVerified = Boolean(sellerObj.isVerified || safeProduct.verified);
+  const sellerUniversity = sellerObj.universityName || safeProduct.universityName || safeProduct.campusName || 'Campus Member';
 
-  React.useEffect(() => {
-    if (product?.status) setProductStatus(product.status);
-  }, [product?.status]);
+  // Check if current user is the seller
+  const currentUserId = String(user?.id || user?._id || '');
+  const currentUserEmail = (user?.email || '').toLowerCase().trim();
+  const sellerId = String(sellerObj._id || sellerObj.id || safeProduct.sellerId || (typeof safeProduct.seller === 'string' ? safeProduct.seller : '') || '');
+  const sellerEmail = (sellerObj.email || safeProduct.sellerEmail || '').toLowerCase().trim();
 
-  const handleMarkAsSold = async () => {
-    if (productStatus === 'sold') return; // Cannot be active again once sold!
-    const newStatus = 'sold';
-    setProductStatus(newStatus);
+  // Strict check: current user is the owner ONLY if IDs/emails match or it is in their own userAds
+  const isMyListing = Boolean(
+    (currentUserId && sellerId && currentUserId === sellerId) ||
+    (currentUserEmail && sellerEmail && currentUserEmail === sellerEmail) ||
+    (Array.isArray(userAds) && userAds.some(a => String(a._id || a.id) === String(productId)))
+  );
 
-    if (setUserAds) {
-      setUserAds(prev => prev.map(a => 
-        (String(a._id || a.id) === String(productId)) ? { ...a, status: newStatus } : a
-      ));
-    }
+  const targetSellerKey = sellerId || sellerNameNormalized || 'seller';
+  const [sellerRatingData, setSellerRatingData] = useState(() => getSellerRatings(targetSellerKey));
 
-    try {
-      await updateProductStatus(productId, newStatus);
-    } catch (err) {
-      console.error('Failed to update product status:', err);
-    }
-  };
+  useEffect(() => {
+    setSellerRatingData(getSellerRatings(targetSellerKey));
+  }, [targetSellerKey]);
 
-  if (!product) {
-    return (
-      <div className="w-full h-full min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
-        <p className="text-slate-500 text-sm mb-4">Listing not found or has been removed.</p>
-        <button
-          onClick={onNavigateBack}
-          className="px-5 py-2.5 bg-[#1944F1] text-white rounded-full text-xs font-bold shadow-md"
-        >
-          Go Back
-        </button>
-      </div>
-    );
-  }
-
-  const productId = product._id || product.id;
-  const isFav = (favorites || []).some(id => String(id) === String(productId));
-
-  // Extract all photos
-  const rawImages = (Array.isArray(product.images) && product.images.length > 0)
-    ? product.images
-    : (product.image ? [product.image] : ['https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=800&q=80']);
-
-  const currentImage = rawImages[selectedPhotoIndex] || rawImages[0];
+  useEffect(() => {
+    if (safeProduct?.status) setProductStatus(safeProduct.status);
+  }, [safeProduct?.status]);
 
   // Lock background scroll and listen for keydown events while image viewer is open
   useEffect(() => {
@@ -154,32 +131,58 @@ export default function ProductDetailsScreen({
     };
   }, [isImageViewerOpen, rawImages.length]);
 
-  // Extract seller information
-  const sellerObj = product.seller || {};
-  const sellerName = sellerObj.fullName || product.sellerName || 'Campus Student';
-  const sellerInitial = sellerName.charAt(0).toUpperCase();
-  const isSellerVerified = Boolean(sellerObj.isVerified || product.verified);
-  const sellerUniversity = sellerObj.universityName || product.universityName || product.campusName || 'Campus Member';
+  const handleReportSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmittingReport(true);
+    try {
+      await apiReportProduct(productId, { reason: reportReason, details: reportDetails });
+      setReportSuccess(true);
+      setTimeout(() => {
+        setIsReportModalOpen(false);
+        setReportSuccess(false);
+        setReportDetails('');
+      }, 2000);
+    } catch (err) {
+      alert(err.message || 'Failed to submit report');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
 
-  // Check if current user is the seller
-  const currentUserId = String(user?.id || user?._id || '');
-  const currentUserEmail = (user?.email || '').toLowerCase().trim();
-  const sellerId = String(sellerObj?._id || sellerObj?.id || product.sellerId || (typeof product.seller === 'string' ? product.seller : '') || '');
-  const sellerEmail = (sellerObj?.email || product.sellerEmail || '').toLowerCase().trim();
+  const handleMarkAsSold = async () => {
+    if (productStatus === 'sold') return; // Cannot be active again once sold!
+    const newStatus = 'sold';
+    setProductStatus(newStatus);
 
-  // Strict check: current user is the owner ONLY if IDs/emails match or it is in their own userAds
-  const isMyListing = Boolean(
-    (currentUserId && sellerId && currentUserId === sellerId) ||
-    (currentUserEmail && sellerEmail && currentUserEmail === sellerEmail) ||
-    (Array.isArray(userAds) && userAds.some(a => String(a._id || a.id) === String(productId)))
-  );
+    if (setUserAds) {
+      setUserAds(prev => prev.map(a => 
+        (String(a._id || a.id) === String(productId)) ? { ...a, status: newStatus } : a
+      ));
+    }
 
-  const targetSellerKey = sellerId || sellerNameNormalized || 'seller';
-  const [sellerRatingData, setSellerRatingData] = useState(() => getSellerRatings(targetSellerKey));
+    try {
+      await updateProductStatus(productId, newStatus);
+    } catch (err) {
+      console.error('Failed to update product status:', err);
+    }
+  };
 
-  useEffect(() => {
-    setSellerRatingData(getSellerRatings(targetSellerKey));
-  }, [targetSellerKey]);
+  if (!product || !productId) {
+    return (
+      <div className="w-full h-full min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
+        <p className="text-slate-500 text-sm mb-4">Listing not found or has been removed.</p>
+        <button
+          type="button"
+          onClick={onNavigateBack}
+          className="px-5 py-2.5 bg-[#1944F1] text-white rounded-full text-xs font-bold shadow-md"
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
+
+  const currentImage = rawImages[selectedPhotoIndex] || rawImages[0];
 
   const resolvedSellerCourse = isMyListing
     ? (user?.course || (typeof window !== 'undefined' ? (localStorage.getItem('user_course') || localStorage.getItem('pending_course')) : '') || sellerObj.sellerCourse || sellerObj.course || '')
