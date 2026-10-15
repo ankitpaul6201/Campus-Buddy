@@ -127,10 +127,11 @@ export default function App() {
               setLoadingStatusText('Loading campus marketplace...');
               setLoadingProgress(prev => Math.max(prev, 60));
               fetchMyAds().then(ads => {
-                if (isMounted) setUserAds(resolveAllUserAds(user, Array.isArray(ads) ? ads : []));
+                if (isMounted) setUserAds(Array.isArray(ads) ? ads : []);
               }).catch(() => {});
             } else {
               setCurrentUser(null);
+              setUserAds([]);
               setCurrentScreen('welcome');
               setHomeDataReady(true);
             }
@@ -138,6 +139,7 @@ export default function App() {
         } catch {
           if (isMounted) {
             setCurrentUser(null);
+            setUserAds([]);
             setCurrentScreen('welcome');
             setHomeDataReady(true);
           }
@@ -145,6 +147,7 @@ export default function App() {
       } else {
         if (isMounted) {
           setCurrentUser(null);
+          setUserAds([]);
           setCurrentScreen('welcome');
           setHomeDataReady(true);
         }
@@ -290,19 +293,21 @@ export default function App() {
     disconnectSocket();
     apiLogout();
     setCurrentUser(null);
+    setUserAds([]);
     setNotifications([]);
     setCurrentScreen('welcome');
   };
 
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
+    setUserAds([]); // Clear previous user's ads immediately
     setCurrentScreen('main');
     initSocketClient(getAuthToken());
     fetchNotifications().then(res => {
       if (res && Array.isArray(res.notifications)) setNotifications(res.notifications);
     }).catch(() => {});
     fetchMyAds().then(ads => {
-      setUserAds(resolveAllUserAds(currentUser || getStoredUser(), Array.isArray(ads) ? ads : []));
+      setUserAds(Array.isArray(ads) ? ads : []);
     }).catch(() => {});
   };
 

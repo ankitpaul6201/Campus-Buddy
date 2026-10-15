@@ -25,10 +25,10 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites =
 
   // Keep internal list in sync with parent userAds
   useEffect(() => {
-    if (userAds && userAds.length > 0) {
+    if (Array.isArray(userAds)) {
       setAdsList(resolveMyAds(userAds));
     }
-  }, [userAds]);
+  }, [userAds, user?._id, user?.id]);
 
   // Load from backend on mount and sync with local listings
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites =
         setLoading(true);
         const res = await fetchMyAds();
         if (isMounted) {
-          const resolved = resolveMyAds(Array.isArray(res) ? res : []);
+          const resolved = Array.isArray(res) ? res : [];
           setAdsList(resolved);
           if (setUserAds) setUserAds(resolved);
         }

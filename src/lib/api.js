@@ -20,6 +20,8 @@ export const getAuthToken = () => localStorage.getItem('campus_jwt_token');
 export const setAuthToken = (token) => {
   if (token) localStorage.setItem('campus_jwt_token', token);
   else localStorage.removeItem('campus_jwt_token');
+  // Wipe legacy shared user ads cache to prevent cross-account leak
+  localStorage.removeItem('campus_user_ads');
 };
 
 export const getStoredUser = () => {
@@ -266,6 +268,14 @@ export async function apiReportProduct(productId, { reason, details }) {
 
 // Log out user
 export function apiLogout() {
+  try {
+    const storedUser = getStoredUser();
+    const currentUserId = String(storedUser?._id || storedUser?.id || '');
+    if (currentUserId) {
+      localStorage.removeItem(`campus_user_ads_${currentUserId}`);
+    }
+  } catch {}
+  localStorage.removeItem('campus_user_ads');
   localStorage.removeItem('campus_jwt_token');
   localStorage.removeItem('campus_user');
   localStorage.removeItem('user_custom_avatar');
@@ -275,6 +285,8 @@ export function apiLogout() {
   localStorage.removeItem('user_year');
   localStorage.removeItem('user_id_verified');
   localStorage.removeItem('user_student_id_url');
+  localStorage.removeItem('pending_email');
+  localStorage.removeItem('pending_uni');
 }
 
 // ─── Public Endpoints ──────────────────────────────────────────────────────
@@ -327,12 +339,10 @@ export async function fetchProducts(university) {
       if (!res.ok) throw new Error('Failed to fetch products');
       const data = await res.json();
       if (Array.isArray(data)) {
-        // Sync to local cache and include all user ads so nothing is ever dropped
+        // Sync to local cache
         const existingCached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
-        const userAds = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
         const mergedMap = new Map();
         existingCached.forEach(p => p && (p._id || p.id) && mergedMap.set(String(p._id || p.id), p));
-        userAds.forEach(p => p && (p._id || p.id) && mergedMap.set(String(p._id || p.id), p));
         data.forEach(p => p && (p._id || p.id) && mergedMap.set(String(p._id || p.id), p));
         const allMerged = Array.from(mergedMap.values());
         localStorage.setItem('campus_products_cache', JSON.stringify(allMerged));
@@ -444,11 +454,14 @@ export async function createProductListing(productData, explicitToken) {
     };
   }
 
-  // Sync to local user ads and products cache
+  // Sync to user-scoped ads and products cache
   try {
-    const userAds = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
-    const updatedUserAds = [createdProduct, ...userAds.filter(a => (a._id || a.id) !== (createdProduct._id || createdProduct.id))];
-    localStorage.setItem('campus_user_ads', JSON.stringify(updatedUserAds));
+    const userAdsKey = getUserAdsStorageKey(storedUser);
+    if (userAdsKey) {
+      const userAds = JSON.parse(localStorage.getItem(userAdsKey) || '[]');
+      const updatedUserAds = [createdProduct, ...userAds.filter(a => (a._id || a.id) !== (createdProduct._id || createdProduct.id))];
+      localStorage.setItem(userAdsKey, JSON.stringify(updatedUserAds));
+    }
 
     const allProducts = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
     const updatedAll = [createdProduct, ...allProducts.filter(a => (a._id || a.id) !== (createdProduct._id || createdProduct.id))];
@@ -460,56 +473,59 @@ export async function createProductListing(productData, explicitToken) {
   return createdProduct;
 }
 
+// Helper to get user-specific ads storage key
+export function getUserAdsStorageKey(user = getStoredUser()) {
+  const uid = user?._id || user?.id;
+  return uid ? `campus_user_ads_${uid}` : null;
+}
+
+// Strict check: verify an ad actually belongs to the specified user
+export function isAdOwnedByUser(ad, user = getStoredUser()) {
+  if (!ad || !user) return false;
+  const currentUserId = String(user._id || user.id || '');
+  const currentUserEmail = (user.email || '').toLowerCase().trim();
+  const seller = ad.seller;
+  if (!seller) return false;
+  const sellerId = typeof seller === 'object' ? String(seller._id || seller.id || '') : String(seller);
+  if (currentUserId && sellerId && sellerId === currentUserId) return true;
+  const sellerEmail = (typeof seller === 'object' ? (seller.email || '') : '').toLowerCase().trim();
+  if (currentUserEmail && sellerEmail && sellerEmail === currentUserEmail) return true;
+  return false;
+}
+
 // Universal helper to resolve all ads for a student from memory, local cache, and backend
-export function resolveAllUserAds(user = getStoredUser(), incomingList = []) {
+export function resolveAllUserAds(user = getStoredUser(), incomingList = null) {
   try {
-    const currentUserId = String(user?._id || user?.id || '');
-    const currentUserEmail = (user?.email || (typeof window !== 'undefined' ? localStorage.getItem('pending_email') : '') || '').toLowerCase();
-    const currentUserName = (user?.fullName || user?.name || (typeof window !== 'undefined' ? localStorage.getItem('user_custom_fullname') : '') || '').toLowerCase();
-
-    const sources = [];
-    if (Array.isArray(incomingList) && incomingList.length > 0) {
-      sources.push(...incomingList);
+    if (!user || (!user._id && !user.id && !user.email)) {
+      return [];
     }
-    try {
-      const localUserAds = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
-      if (Array.isArray(localUserAds)) sources.push(...localUserAds);
-    } catch {}
-    try {
-      const cachedProducts = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
-      if (Array.isArray(cachedProducts)) {
-        const myCached = cachedProducts.filter(p => {
-          if (!p) return false;
-          const seller = p.seller;
-          if (seller === 'user_me') return true;
-          const sellerId = typeof seller === 'object' ? String(seller?._id || seller?.id || '') : String(seller || '');
-          if (currentUserId && sellerId && sellerId === currentUserId) return true;
-          const sellerEmail = (typeof seller === 'object' ? seller?.email : '') || '';
-          if (currentUserEmail && sellerEmail && sellerEmail.toLowerCase() === currentUserEmail) return true;
-          const sellerName = (typeof seller === 'object' ? seller?.fullName || seller?.name : '') || '';
-          if (currentUserName && sellerName && sellerName.toLowerCase() === currentUserName) return true;
-          return false;
-        });
-        sources.push(...myCached);
-      }
-    } catch {}
 
-    const deduped = new Map();
-    sources.forEach(ad => {
-      if (ad && (ad._id || ad.id)) {
-        deduped.set(String(ad._id || ad.id), ad);
-      }
-    });
+    const userAdsKey = getUserAdsStorageKey(user);
 
-    const result = Array.from(deduped.values());
-    if (result.length > 0) {
+    // If incomingList is passed (e.g. from backend /products/my-ads), it is authoritative
+    if (Array.isArray(incomingList)) {
+      const owned = incomingList.filter(ad => isAdOwnedByUser(ad, user));
+      if (userAdsKey) {
+        try {
+          localStorage.setItem(userAdsKey, JSON.stringify(owned));
+        } catch {}
+      }
+      return owned;
+    }
+
+    // Otherwise, load from user-specific cache
+    if (userAdsKey) {
       try {
-        localStorage.setItem('campus_user_ads', JSON.stringify(result));
+        const local = JSON.parse(localStorage.getItem(userAdsKey) || '[]');
+        if (Array.isArray(local)) {
+          return local.filter(ad => isAdOwnedByUser(ad, user));
+        }
       } catch {}
     }
-    return result;
+
+    return [];
   } catch {
-    return incomingList || [];
+    return [];
   }
 }
 
@@ -517,21 +533,25 @@ export function resolveAllUserAds(user = getStoredUser(), incomingList = []) {
 export async function fetchMyAds() {
   const token = getAuthToken();
   const user = getStoredUser();
+  if (!token || !user) {
+    return [];
+  }
+
+  const userAdsKey = getUserAdsStorageKey(user);
+
   try {
-    if (token) {
-      const res = await fetch(`${API_BASE_URL}/products/my-ads`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return resolveAllUserAds(user, Array.isArray(data) ? data : []);
-      }
+    const res = await fetch(`${API_BASE_URL}/products/my-ads`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return resolveAllUserAds(user, Array.isArray(data) ? data : []);
     }
   } catch (err) {
     console.warn('Backend my-ads unavailable, using local cache:', err);
   }
 
-  return resolveAllUserAds(user, []);
+  return resolveAllUserAds(user, null);
 }
 
 // Update status of product (active / sold)
@@ -564,9 +584,13 @@ export async function updateProductStatus(productId, status) {
 
 function syncLocalProductStatus(id, status) {
   try {
-    const userAds = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
-    const updated = userAds.map(ad => (ad._id === id || ad.id === id) ? { ...ad, status } : ad);
-    localStorage.setItem('campus_user_ads', JSON.stringify(updated));
+    const storedUser = getStoredUser();
+    const userAdsKey = getUserAdsStorageKey(storedUser);
+    if (userAdsKey) {
+      const userAds = JSON.parse(localStorage.getItem(userAdsKey) || '[]');
+      const updated = userAds.map(ad => (ad._id === id || ad.id === id) ? { ...ad, status } : ad);
+      localStorage.setItem(userAdsKey, JSON.stringify(updated));
+    }
 
     const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
     const updatedCached = cached.map(ad => (ad._id === id || ad.id === id) ? { ...ad, status } : ad);
@@ -589,8 +613,12 @@ export async function deleteProductListing(productId) {
   }
 
   try {
-    const userAds = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
-    localStorage.setItem('campus_user_ads', JSON.stringify(userAds.filter(ad => (ad._id || ad.id) !== productId)));
+    const storedUser = getStoredUser();
+    const userAdsKey = getUserAdsStorageKey(storedUser);
+    if (userAdsKey) {
+      const userAds = JSON.parse(localStorage.getItem(userAdsKey) || '[]');
+      localStorage.setItem(userAdsKey, JSON.stringify(userAds.filter(ad => (ad._id || ad.id) !== productId)));
+    }
 
     const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
     localStorage.setItem('campus_products_cache', JSON.stringify(cached.filter(ad => (ad._id || ad.id) !== productId)));
