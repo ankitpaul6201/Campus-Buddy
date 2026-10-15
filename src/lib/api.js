@@ -115,6 +115,11 @@ export async function apiUpdateProfile(profileData) {
         if (data.user) {
           updatedUser = data.user;
           localStorage.setItem('campus_user', JSON.stringify(data.user));
+          if (data.user.avatar) localStorage.setItem('user_custom_avatar', data.user.avatar);
+          if (data.user.fullName) localStorage.setItem('user_custom_fullname', data.user.fullName);
+          if (data.user.dob) localStorage.setItem('user_dob', data.user.dob);
+          if (data.user.course) localStorage.setItem('user_course', data.user.course);
+          if (data.user.year) localStorage.setItem('user_year', data.user.year);
         }
         return data;
       }
@@ -132,6 +137,41 @@ export async function apiUpdateProfile(profileData) {
   };
   localStorage.setItem('campus_user', JSON.stringify(mergedUser));
   return { user: mergedUser };
+}
+
+// Upload avatar directly to Cloudinary and persist to user profile
+export async function apiUploadAvatar(fileOrBase64) {
+  const token = getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  let body;
+  let headers = { Authorization: `Bearer ${token}` };
+
+  if (typeof fileOrBase64 === 'string') {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify({ avatar: fileOrBase64 });
+  } else {
+    const formData = new FormData();
+    formData.append('avatar', fileOrBase64);
+    body = formData;
+  }
+
+  const res = await fetch(`${API_BASE_URL}/auth/me/avatar`, {
+    method: 'POST',
+    headers,
+    body,
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to upload profile picture');
+
+  if (data.user) {
+    localStorage.setItem('campus_user', JSON.stringify(data.user));
+    if (data.user.avatar) {
+      localStorage.setItem('user_custom_avatar', data.user.avatar);
+    }
+  }
+  return data;
 }
 
 // Update password for logged in user

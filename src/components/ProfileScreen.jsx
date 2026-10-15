@@ -79,23 +79,26 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
 
   // Saved Profile State (Committed source of truth)
   const [savedProfile, setSavedProfile] = useState(() => ({
-    fullName: localStorage.getItem('user_custom_fullname') || user?.fullName || user?.name || '',
-    dob: localStorage.getItem('user_dob') || user?.dob || '',
-    course: localStorage.getItem('user_course') || user?.course || '',
-    year: localStorage.getItem('user_year') || user?.year || '1st Year',
-    avatar: localStorage.getItem('user_custom_avatar') || user?.avatar || null
+    fullName: user?.fullName || user?.name || localStorage.getItem('user_custom_fullname') || '',
+    dob: user?.dob || localStorage.getItem('user_dob') || '',
+    course: user?.course || localStorage.getItem('user_course') || '',
+    year: user?.year || localStorage.getItem('user_year') || '1st Year',
+    avatar: (user?.avatar && user.avatar !== '/avatar.svg' ? user.avatar : null) || localStorage.getItem('user_custom_avatar') || user?.avatar || null
   }));
 
-  // Sync savedProfile when user prop updates
+  // Sync savedProfile when user prop updates from DB
   useEffect(() => {
     if (user) {
       setSavedProfile({
-        fullName: localStorage.getItem('user_custom_fullname') || user?.fullName || user?.name || '',
-        dob: localStorage.getItem('user_dob') || user?.dob || '',
-        course: localStorage.getItem('user_course') || user?.course || '',
-        year: localStorage.getItem('user_year') || user?.year || '1st Year',
-        avatar: localStorage.getItem('user_custom_avatar') || user?.avatar || null
+        fullName: user?.fullName || user?.name || localStorage.getItem('user_custom_fullname') || '',
+        dob: user?.dob || localStorage.getItem('user_dob') || '',
+        course: user?.course || localStorage.getItem('user_course') || '',
+        year: user?.year || localStorage.getItem('user_year') || '1st Year',
+        avatar: (user?.avatar && user.avatar !== '/avatar.svg' ? user.avatar : null) || localStorage.getItem('user_custom_avatar') || user?.avatar || null
       });
+      if (user?.avatar && user.avatar !== '/avatar.svg') {
+        localStorage.setItem('user_custom_avatar', user.avatar);
+      }
     }
   }, [user]);
 
@@ -226,13 +229,18 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
       });
 
       // 3. Persist to API
-      await apiUpdateProfile({
+      const result = await apiUpdateProfile({
         fullName: finalName,
         dob: finalDob,
         course: finalCourse,
         year: finalYear,
         ...(finalAvatar ? { avatar: finalAvatar } : {})
       });
+
+      if (result?.user?.avatar) {
+        setSavedProfile(prev => ({ ...prev, avatar: result.user.avatar }));
+        localStorage.setItem('user_custom_avatar', result.user.avatar);
+      }
 
       setProfileSavedMessage(true);
       showToast("Profile changes saved successfully!", "success");

@@ -26,6 +26,18 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: '/avatar.svg'
   },
+  dob: {
+    type: String,
+    default: ''
+  },
+  course: {
+    type: String,
+    default: ''
+  },
+  year: {
+    type: String,
+    default: '1st Year'
+  },
   studentIdUrl: {
     type: String,
     default: ''

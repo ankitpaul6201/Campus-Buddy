@@ -5,6 +5,13 @@ const cloudinary = require('cloudinary').v2;
 const User = require('../models/User');
 const emailService = require('../services/emailService');
 
+// Configure Cloudinary explicitly from environment
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
 const JWT_SECRET = process.env.JWT_SECRET || 'campus_buddy_super_secret_jwt_key_2026_token_auth';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,6 +32,9 @@ const formatUser = (user) => ({
   email: user.email,
   universityName: user.universityName || 'Campus Member',
   avatar: user.avatar || '/avatar.svg',
+  dob: user.dob || '',
+  course: user.course || '',
+  year: user.year || '1st Year',
   studentIdUrl: user.studentIdUrl || '',
   isVerified: Boolean(user.isVerified),
   createdAt: user.createdAt,
@@ -174,7 +184,7 @@ async function getMe(req, res, next) {
 async function updateUniversity(req, res, next) {
   try {
     const userId = req.user.id || (req.auth && req.auth.userId);
-    const { universityName, fullName, name, isVerified, studentIdUrl, avatar } = req.body;
+    const { universityName, fullName, name, isVerified, studentIdUrl, avatar, dob, course, year } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -184,9 +194,29 @@ async function updateUniversity(req, res, next) {
     // University name is locked once verified and cannot be edited
     if (universityName && !user.universityName) user.universityName = universityName;
     if (fullName || name) user.fullName = fullName || name;
-    if (avatar) user.avatar = avatar;
+    if (dob !== undefined) user.dob = dob;
+    if (course !== undefined) user.course = course;
+    if (year !== undefined) user.year = year;
     if (studentIdUrl) user.studentIdUrl = studentIdUrl;
     if (isVerified !== undefined) user.isVerified = Boolean(isVerified);
+
+    // If avatar is provided as a Base64 data URI, upload it permanently to Cloudinary
+    if (avatar && typeof avatar === 'string') {
+      if (avatar.startsWith('data:image')) {
+        try {
+          const uploadRes = await cloudinary.uploader.upload(avatar, {
+            folder: 'campus_buddy_avatars',
+            resource_type: 'image',
+            transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face', quality: 'auto', fetch_format: 'auto' }]
+          });
+          user.avatar = uploadRes.secure_url;
+        } catch (cloudErr) {
+          console.error('[authController] Cloudinary avatar upload failed:', cloudErr.message);
+        }
+      } else if (avatar.startsWith('http') || avatar.startsWith('/')) {
+        user.avatar = avatar;
+      }
+    }
 
     await user.save();
 
@@ -452,6 +482,48 @@ async function uploadStudentId(req, res, next) {
 }
 
 /**
+ * Upload profile avatar image to Cloudinary
+ */
+async function uploadAvatar(req, res, next) {
+  try {
+    const userId = req.user.id || (req.auth && req.auth.userId);
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    let fileData = null;
+    if (req.file) {
+      fileData = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    } else if (req.body && typeof req.body.avatar === 'string') {
+      fileData = req.body.avatar;
+    }
+
+    if (!fileData) {
+      return res.status(400).json({ error: 'No avatar image file provided' });
+    }
+
+    const uploadRes = await cloudinary.uploader.upload(fileData, {
+      folder: 'campus_buddy_avatars',
+      resource_type: 'image',
+      transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face', quality: 'auto', fetch_format: 'auto' }]
+    });
+
+    user.avatar = uploadRes.secure_url;
+    await user.save();
+
+    res.json({
+      success: true,
+      url: uploadRes.secure_url,
+      avatar: uploadRes.secure_url,
+      user: formatUser(user)
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * DELETE /api/auth/me
  * Permanently delete authenticated user's account and all associated listings and chats
  */
@@ -499,5 +571,6 @@ module.exports = {
   verifyResetCode,
   resetPassword,
   uploadStudentId,
+  uploadAvatar,
   deleteAccount
 };

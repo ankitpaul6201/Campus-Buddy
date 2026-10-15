@@ -26,6 +26,9 @@ router.get('/me', authMiddleware, authController.getMe);
 // @route   PUT /api/auth/me/university
 router.put('/me/university', authMiddleware, authController.updateUniversity);
 
+// @route   POST /api/auth/me/avatar
+router.post('/me/avatar', authMiddleware, upload.single('avatar'), authController.uploadAvatar);
+
 // @route   PUT /api/auth/me/password
 router.put('/me/password', authMiddleware, authController.updatePassword);
 
