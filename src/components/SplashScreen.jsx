@@ -66,14 +66,21 @@ export default function SplashScreen({ onComplete }) {
         </motion.div>
       </div>
 
-      {/* Skip indicator */}
+      {/* Loading Bar at Bottom */}
       <motion.div 
-        animate={{ y: [0, 4, 0] }}
-        transition={{ repeat: Infinity, duration: 1.5 }}
-        className="absolute bottom-10 flex items-center gap-2 text-xs text-gray-400 font-normal"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.4 }}
+        className="absolute bottom-12 left-0 right-0 px-8 flex flex-col items-center max-w-xs mx-auto z-20"
       >
-        <span>Tap anywhere to skip</span>
-        <ArrowRight className="w-3.5 h-3.5" />
+        <div className="w-full h-1.5 bg-blue-950/40 rounded-full overflow-hidden p-[1px] shadow-inner backdrop-blur-xs border border-white/15">
+          <motion.div 
+            initial={{ width: "15%" }}
+            animate={{ width: "100%" }}
+            transition={{ duration: 2.2, ease: "easeInOut" }}
+            className="h-full bg-gradient-to-r from-blue-300 via-white to-blue-100 rounded-full shadow-[0_0_12px_rgba(255,255,255,0.85)]"
+          />
+        </div>
       </motion.div>
     </motion.div>
   );

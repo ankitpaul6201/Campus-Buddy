@@ -17,6 +17,11 @@ import {
   sendMessage, 
   getStoredUser 
 } from '../lib/api';
+import { 
+  subscribeToChatMessages, 
+  joinConversationRoom, 
+  leaveConversationRoom 
+} from '../lib/socket';
 
 export default function ChatScreen({ 
   user, 
@@ -173,6 +178,53 @@ export default function ChatScreen({
     }
   };
 
+  // Real-time Socket.io listener for active conversation
+  useEffect(() => {
+    if (!selectedChatId) return;
+
+    joinConversationRoom(selectedChatId);
+
+    const unsub = subscribeToChatMessages(({ conversationId, message }) => {
+      if (String(conversationId) === String(selectedChatId) && message) {
+        const currentUserIdStr = String(currentUserId || 'me');
+        const isMine = String(message.sender?._id || message.sender) === currentUserIdStr;
+
+        if (!isMine) {
+          setMessages(prev => {
+            const exists = prev.some(m => String(m.id) === String(message._id || message.id));
+            if (exists) return prev;
+            return [
+              ...prev,
+              {
+                id: message._id || message.id || Math.random(),
+                text: message.text,
+                sender: 'other',
+                time: message.createdAt 
+                  ? new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                  : 'Now',
+                read: true
+              }
+            ];
+          });
+        }
+      }
+
+      // Update snippet in chats list
+      if (message && message.text) {
+        setChatsList(prev => prev.map(c => 
+          String(c.id) === String(conversationId)
+            ? { ...c, lastMessage: message.text, time: 'Just now' }
+            : c
+        ));
+      }
+    });
+
+    return () => {
+      leaveConversationRoom(selectedChatId);
+      unsub();
+    };
+  }, [selectedChatId, currentUserId]);
+
   const handleSendMessage = async (textToSend = inputText) => {
     const trimmed = textToSend.trim();
     if (!trimmed || !selectedChatId) return;
@@ -232,9 +284,10 @@ export default function ChatScreen({
               <div className="flex items-center gap-2.5">
                 <button 
                   onClick={() => setSelectedChatId(null)}
-                  className="w-8 h-8 rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-700 active:scale-95 transition-all shrink-0"
+                  className="w-8 h-8 rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-700 hover:bg-slate-200 active:scale-95 transition-all duration-200 hover:-translate-x-1 active:-translate-x-1.5 shrink-0 group"
+                  title="Back to conversations"
                 >
-                  <ArrowLeft className="w-4 h-4" />
+                  <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5 group-active:-translate-x-1" />
                 </button>
 
                 <div className="flex items-center gap-2.5">

@@ -203,9 +203,10 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
               else if (forgotStep === 'new_password') setForgotStep('otp');
               else resetForgotFlow();
             }}
-            className="text-white p-1 hover:opacity-80 transition-opacity"
+            className="text-white p-1 hover:opacity-90 transition-all duration-200 hover:-translate-x-1 active:-translate-x-1.5 active:scale-95 group"
+            title="Go back"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-6 h-6 transition-transform duration-200 group-hover:-translate-x-0.5 group-active:-translate-x-1" />
           </button>
           <div className="mt-6 space-y-1.5">
             <div className="flex items-center gap-2 mb-2">
@@ -395,9 +396,10 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
         <div className="pt-14 px-6 pb-6 shrink-0">
           <button
             onClick={() => setVerificationStep(false)}
-            className="text-white p-1 hover:opacity-80 transition-opacity"
+            className="text-white p-1 hover:opacity-90 transition-all duration-200 hover:-translate-x-1 active:-translate-x-1.5 active:scale-95 group"
+            title="Go back"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-6 h-6 transition-transform duration-200 group-hover:-translate-x-0.5 group-active:-translate-x-1" />
           </button>
           <div className="mt-6 space-y-1.5">
             <h1 className="text-3xl font-bold tracking-tight text-white font-sans">
@@ -454,9 +456,10 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
         <div className="flex items-center justify-between">
           <button
             onClick={() => onNavigate('welcome')}
-            className="text-white p-1 hover:opacity-80 transition-opacity"
+            className="text-white p-1 hover:opacity-90 transition-all duration-200 hover:-translate-x-1 active:-translate-x-1.5 active:scale-95 group"
+            title="Go back"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-6 h-6 transition-transform duration-200 group-hover:-translate-x-0.5 group-active:-translate-x-1" />
           </button>
 
           <button

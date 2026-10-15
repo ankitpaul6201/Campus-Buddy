@@ -318,9 +318,10 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
               else if (step === 2) setStep(1);
               else onNavigate('welcome');
             }}
-            className="text-white p-1 hover:opacity-80 transition-opacity"
+            className="text-white p-1 hover:opacity-90 transition-all duration-200 hover:-translate-x-1 active:-translate-x-1.5 active:scale-95 group"
+            title="Go back"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-6 h-6 transition-transform duration-200 group-hover:-translate-x-0.5 group-active:-translate-x-1" />
           </button>
 
           <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-normal text-white">

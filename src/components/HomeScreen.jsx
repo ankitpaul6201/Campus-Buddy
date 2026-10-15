@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   Truck,
-  ArrowRight, 
+  ArrowRight,
   CheckCircle2,
   Bell,
   X,
@@ -21,12 +21,23 @@ import SellScreen from './SellScreen';
 import MyAdsScreen from './MyAdsScreen';
 import ProfileScreen from './ProfileScreen';
 import WishlistScreen from './WishlistScreen';
-import { fetchProducts, formatRupeePrice } from '../lib/api';
+import { fetchProducts, formatRupeePrice, updateAdLikes, incrementAdViews, getOptimizedImageUrl } from '../lib/api';
 
-export default function HomeScreen({ user, activeNav, setActiveNav, favorites, setFavorites, notifications = [], userAds = [], onOpenChat, onNavigate }) {
+export default function HomeScreen({ user, activeNav, setActiveNav, favorites, setFavorites, notifications = [], userAds = [], onOpenChat, onNavigate, onSelectProduct, onInitialLoadComplete }) {
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [dbProducts, setDbProducts] = useState([]);
+  const [dbProducts, setDbProducts] = useState(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
+      const userCached = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
+      const map = new Map();
+      cached.forEach(p => map.set(String(p._id || p.id), p));
+      userCached.forEach(p => map.set(String(p._id || p.id), p));
+      return Array.from(map.values());
+    } catch {
+      return [];
+    }
+  });
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
 
@@ -52,7 +63,10 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
         console.warn('Could not fetch products:', err);
         if (isMounted) setDbProducts([]);
       } finally {
-        if (isMounted) setLoadingProducts(false);
+        if (isMounted) {
+          setLoadingProducts(false);
+          if (onInitialLoadComplete) onInitialLoadComplete();
+        }
       }
     };
     loadProducts();
@@ -93,24 +107,45 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
     setSearchQuery('');
   };
 
-  // Merge dbProducts and userAds dynamically, deduplicating by ID
+  // Merge dbProducts and userAds dynamically, deduplicating by ID with userAds precedence
   const baseProducts = React.useMemo(() => {
     const map = new Map();
-    // 1. Include user ads
-    (userAds || []).forEach(ad => {
-      const id = String(ad._id || ad.id);
-      map.set(id, {
-        ...ad,
-        sellerName: ad.sellerName || user?.fullName || 'You',
-        seller: ad.seller || { fullName: user?.fullName || 'You', isVerified: true }
-      });
-    });
-    // 2. Include fetched database products
+    // 1. Populate database products first
     (dbProducts || []).forEach(p => {
       const id = String(p._id || p.id);
       map.set(id, p);
     });
-    return Array.from(map.values()).filter(p => (p.status || 'active') === 'active');
+    // 2. Overlay user ads (which contain latest user actions and optimistic status changes)
+    (userAds || []).forEach(ad => {
+      const id = String(ad._id || ad.id);
+      const existing = map.get(id) || {};
+      map.set(id, {
+        ...existing,
+        ...ad,
+        sellerName: ad.sellerName || existing.sellerName || user?.fullName || 'You',
+        seller: ad.seller || existing.seller || { fullName: user?.fullName || 'You', isVerified: true }
+      });
+    });
+
+    // Check localStorage cache for any items marked as sold
+    let locallySoldIds = new Set();
+    try {
+      const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
+      cached.forEach(c => {
+        if (c.status === 'sold') locallySoldIds.add(String(c._id || c.id));
+      });
+      const userCached = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
+      userCached.forEach(u => {
+        if (u.status === 'sold') locallySoldIds.add(String(u._id || u.id));
+      });
+    } catch {}
+
+    // Only active listings should appear on the home screen
+    return Array.from(map.values()).filter(p => {
+      const id = String(p._id || p.id);
+      if (locallySoldIds.has(id)) return false;
+      return (p.status || 'active') === 'active';
+    });
   }, [userAds, dbProducts, user?.fullName]);
 
   const filteredProducts = baseProducts.filter(item => {
@@ -128,7 +163,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
     if (activeTab !== 'all') {
       const itemCat = (item.category || '').toLowerCase();
       const itemTitle = (item.title || '').toLowerCase();
-      const tabMatch = itemCat === activeTab.toLowerCase() || 
+      const tabMatch = itemCat === activeTab.toLowerCase() ||
         (activeTab === 'books' && (itemCat.includes('book') || itemTitle.includes('book') || itemTitle.includes('math') || itemTitle.includes('note'))) ||
         (activeTab === 'electronics' && (itemCat.includes('elect') || itemCat.includes('gadget') || itemTitle.includes('calc') || itemTitle.includes('phone') || itemTitle.includes('laptop') || itemTitle.includes('lamp'))) ||
         (activeTab === 'cycles' && (itemCat.includes('cycle') || itemCat.includes('vehic') || itemTitle.includes('cycle') || itemTitle.includes('bike'))) ||
@@ -171,17 +206,69 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
   });
 
   const toggleFavorite = (id) => {
-    setFavorites(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    if (!setFavorites) return;
+    const idStr = String(id);
+    const currentlyFav = (favorites || []).some(item => String(item) === idStr);
+    updateAdLikes(idStr, !currentlyFav);
+    setFavorites(prev =>
+      currentlyFav
+        ? (prev || []).filter(item => String(item) !== idStr)
+        : [...(prev || []), idStr]
     );
   };
+
+  // Calculate verified wishlisted count matching actual active items
+  const validFavoritesCount = React.useMemo(() => {
+    if (!favorites || !Array.isArray(favorites) || favorites.length === 0) return 0;
+    const cleanFavs = favorites.filter(id => {
+      if (!id) return false;
+      const str = String(id).trim();
+      return str !== '' && str !== 'null' && str !== 'undefined' && str !== 'card-1' && str !== 'card-2' && str !== '1';
+    });
+    if (cleanFavs.length === 0) return 0;
+
+    const activeIds = new Set([
+      ...baseProducts.map(p => String(p._id || p.id)),
+      ...(userAds || []).map(a => String(a._id || a.id)),
+      ...(dbProducts || []).map(p => String(p._id || p.id))
+    ]);
+
+    // Only count favorites that actually exist in the active products catalog
+    return cleanFavs.filter(favId => activeIds.has(String(favId))).length;
+  }, [favorites, baseProducts, userAds, dbProducts]);
+
+  // Synchronize favorites: prune any orphaned / non-existent product IDs once active listings are loaded
+  useEffect(() => {
+    if (!setFavorites || !Array.isArray(favorites) || favorites.length === 0) return;
+    const activeIds = new Set([
+      ...baseProducts.map(p => String(p._id || p.id)),
+      ...(userAds || []).map(a => String(a._id || a.id)),
+      ...(dbProducts || []).map(p => String(p._id || p.id))
+    ]);
+
+    const sanitized = favorites.filter(id => {
+      if (!id) return false;
+      const str = String(id).trim();
+      if (str === '' || str === 'null' || str === 'undefined' || str === 'card-1' || str === 'card-2' || str === '1') {
+        return false;
+      }
+      if (!loadingProducts && activeIds.size > 0) {
+        return activeIds.has(str);
+      }
+      return activeIds.size > 0 ? activeIds.has(str) : true;
+    });
+
+    if (sanitized.length !== favorites.length) {
+      setFavorites(sanitized);
+    }
+  }, [loadingProducts, baseProducts, userAds, dbProducts, favorites, setFavorites]);
 
   const primaryColor = '#1944F1';
   const inactiveColor = '#94A3B8';
   const uploadedHeartPath = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z";
 
   return (
-    <motion.div 
+    <motion.div
       key="home-screen"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -193,9 +280,9 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
       <div className="pt-14 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 min-w-[44px] max-w-[44px] min-h-[44px] max-h-[44px] aspect-square rounded-full overflow-hidden shrink-0 border border-slate-200 shadow-2xs flex items-center justify-center bg-slate-100 select-none">
-            <img 
-              src={user?.avatar || '/avatar-blue-2.svg'} 
-              alt="Profile" 
+            <img
+              src={user?.avatar || '/avatar-blue-2.svg'}
+              alt="Profile"
               className="w-full h-full object-cover shrink-0"
               onError={(e) => { e.currentTarget.src = '/avatar-blue-2.svg'; }}
             />
@@ -213,7 +300,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
 
         <div className="flex items-center gap-2.5">
           {/* Header Wishlist Action Button */}
-          <button 
+          <button
             onClick={() => setActiveNav('wishlist')}
             className="w-10 h-10 min-w-[40px] max-w-[40px] min-h-[40px] max-h-[40px] rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-900 hover:bg-slate-200/60 transition-colors relative shrink-0"
             title="My Wishlist"
@@ -221,15 +308,15 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
             <svg width="20" height="20" viewBox="0 0 24 24">
               <path d={uploadedHeartPath} fill="none" stroke="#0F172A" strokeWidth="1.8" />
             </svg>
-            {favorites.length > 0 && (
+            {validFavoritesCount > 0 && (
               <span className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] min-h-[18px] max-w-[18px] max-h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs">
-                {favorites.length}
+                {validFavoritesCount}
               </span>
             )}
           </button>
 
           {/* Notifications Action Button */}
-          <button 
+          <button
             onClick={() => setActiveNav('notifications')}
             className="w-10 h-10 min-w-[40px] max-w-[40px] min-h-[40px] max-h-[40px] rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-900 hover:bg-slate-200/60 transition-colors relative shrink-0"
             title="Notifications"
@@ -246,7 +333,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
 
       {/* 2. SCROLLABLE MAIN CONTENT CONTAINER - PERFECT EDGE-TO-EDGE FIT */}
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 space-y-5 no-scrollbar">
-        
+
         {/* Search & Filter Bar */}
         <div className="flex items-center gap-2.5 mb-1">
           <div className="flex-1 relative">
@@ -259,7 +346,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
               className="w-full pl-11 pr-8 py-3 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-sm font-normal focus:outline-none focus:ring-1 focus:ring-[#1944F1] border border-slate-100"
             />
             {searchQuery && (
-              <button 
+              <button
                 onClick={() => setSearchQuery('')}
                 className="absolute right-3 top-3.5 w-4.5 h-4.5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-300 transition-colors"
               >
@@ -268,23 +355,22 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
             )}
           </div>
 
-          <button 
+          <button
             onClick={() => setIsFilterModalOpen(true)}
-            className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-all shrink-0 shadow-2xs relative ${
-              hasActiveFilters 
-                ? 'bg-[#1944F1] text-white shadow-md shadow-blue-500/25 ring-2 ring-[#1944F1]/20 active:scale-95' 
+            className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-all shrink-0 shadow-2xs relative ${hasActiveFilters
+                ? 'bg-[#1944F1] text-white shadow-md shadow-blue-500/25 ring-2 ring-[#1944F1]/20 active:scale-95'
                 : 'bg-[#F5F3F3] text-slate-800 border border-slate-100 hover:bg-slate-200/60 active:scale-95'
-            }`}
+              }`}
             title="Filter & sort listings"
           >
-            <svg 
-              width="20" 
-              height="20" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2" 
-              strokeLinecap="round" 
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
               strokeLinejoin="round"
               className={hasActiveFilters ? "text-white" : "text-slate-800"}
             >
@@ -344,7 +430,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
               Clear your room, make some cash.
             </p>
             <div className="pt-2">
-              <button 
+              <button
                 onClick={() => setActiveNav('sell')}
                 className="px-5 py-2.5 rounded-full bg-white text-[#1944F1] hover:bg-blue-50 text-xs font-bold shadow-sm transition-all active:scale-95 inline-flex items-center justify-center"
               >
@@ -366,11 +452,10 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
               <button
                 key={cat.id}
                 onClick={() => setActiveTab(cat.id)}
-                className={`px-5 py-2.5 rounded-full text-xs shrink-0 whitespace-nowrap inline-flex items-center justify-center transition-all ${
-                  isActive
+                className={`px-5 py-2.5 rounded-full text-xs shrink-0 whitespace-nowrap inline-flex items-center justify-center transition-all ${isActive
                     ? 'bg-[#1944F1] text-white shadow-md shadow-blue-500/20 font-bold scale-100'
                     : 'bg-[#F5F3F3] text-slate-700 font-semibold border border-slate-200/60 hover:bg-slate-200/70 active:scale-95'
-                }`}
+                  }`}
               >
                 {cat.label}
               </button>
@@ -442,7 +527,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
         ) : (
           <div className="grid grid-cols-2 gap-3 w-full">
             {filteredProducts.map((item) => {
-              const isFav = favorites.includes(item._id || item.id);
+              const isFav = (favorites || []).some(favId => String(favId) === String(item._id || item.id));
               const priceText = formatRupeePrice(item.price);
               const imageUrl = item.images && item.images.length > 0 ? item.images[0] : (item.image || 'https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=600&q=80');
               const sellerName = item.seller?.fullName || item.sellerName || 'Student';
@@ -451,62 +536,70 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
               return (
                 <div
                   key={item._id || item.id}
-                  onClick={() => setSelectedProduct(item)}
+                  onClick={() => {
+                    const currentUserId = user?.id || user?._id;
+                    const sellerId = item.seller?._id || item.seller?.id || item.seller || item.sellerId;
+                    const isOwnProduct = currentUserId && sellerId && String(currentUserId) === String(sellerId);
+                    if (!isOwnProduct) {
+                      incrementAdViews(item._id || item.id, currentUserId, sellerId);
+                    }
+                    if (onSelectProduct) {
+                      onSelectProduct(item);
+                    } else {
+                      setSelectedProduct(item);
+                    }
+                  }}
                   className="bg-[#F5F3F3] rounded-3xl p-2.5 border border-slate-100 shadow-xs flex flex-col justify-between space-y-2 hover:shadow-md transition-shadow group overflow-hidden w-full text-left cursor-pointer"
                 >
-                  <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-white max-w-full">
+                  <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-slate-100 max-w-full">
                     <img
-                      src={imageUrl}
+                      src={getOptimizedImageUrl(imageUrl, 350)}
                       alt={item.title}
+                      loading="lazy"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
 
-                    {/* Heart Button */}
+                    {/* Circular Heart Button at Bottom-Right of the Image */}
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleFavorite(item._id || item.id);
                       }}
-                      className="absolute top-2 right-2 w-7.5 h-7.5 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center shadow-xs hover:scale-110 active:scale-90 transition-all z-10"
+                      className="absolute bottom-2.5 right-2.5 w-8.5 h-8.5 min-w-[34px] min-h-[34px] rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center shadow-md hover:scale-110 active:scale-90 transition-all z-10 border border-slate-100/60"
+                      title={isFav ? "Remove from favorites" : "Add to favorites"}
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24">
-                        <path 
-                          d={uploadedHeartPath} 
-                          fill={isFav ? '#EF4444' : 'none'} 
-                          stroke={isFav ? '#EF4444' : '#64748B'} 
-                          strokeWidth={isFav ? '1' : '1.8'} 
+                      <svg width="17" height="17" viewBox="0 0 24 24">
+                        <path
+                          d={uploadedHeartPath}
+                          fill={isFav ? '#EF4444' : 'none'}
+                          stroke={isFav ? '#EF4444' : '#0F172A'}
+                          strokeWidth={isFav ? '1' : '1.8'}
                         />
                       </svg>
                     </button>
-
-                    <div className="absolute bottom-2 left-2 bg-white/95 backdrop-blur-md px-2.5 py-0.5 rounded-lg text-xs font-bold text-slate-900 shadow-2xs">
-                      {priceText}
-                    </div>
                   </div>
 
-                  <div className="space-y-1.5 px-0.5">
-                    <div>
-                      <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-[#E0F2FE] text-[#0284C7]">
+                  {/* Below Image: Title with Condition Badge to the right, and Price below */}
+                  <div className="px-1 space-y-1 pt-0.5">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <h4 className="text-xs font-bold text-slate-900 truncate leading-snug font-sans flex-1">
+                        {item.title}
+                      </h4>
+                      <span className={`inline-block px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                        (item.condition || '').toUpperCase().includes('NEW') 
+                          ? 'bg-[#E0F2FE] text-[#0284C7]' 
+                          : (item.condition || '').toUpperCase().includes('GOOD')
+                          ? 'bg-[#EEF2FF] text-[#4F46E5]'
+                          : 'bg-[#FFEDD5] text-[#EA580C]'
+                      }`}>
                         {item.condition || 'LIKE NEW'}
                       </span>
                     </div>
 
-                    <h4 className="text-xs font-semibold text-slate-900 line-clamp-2 leading-snug font-sans">
-                      {item.title}
-                    </h4>
-
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-xs text-slate-500">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px] flex items-center justify-center shrink-0">
-                          {sellerAvatar}
-                        </div>
-                        <span className="font-semibold text-slate-700 truncate max-w-[65px]">{sellerName}</span>
-                        {(item.seller?.isVerified || item.verified) && (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        )}
-                      </div>
-                      <span className="text-[10px] text-slate-400 font-normal shrink-0">Campus</span>
-                    </div>
+                    <p className="text-sm font-extrabold text-black font-sans">
+                      {priceText}
+                    </p>
                   </div>
                 </div>
               );
@@ -574,11 +667,10 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                           key={opt.id}
                           type="button"
                           onClick={() => setSelectedSort(opt.id)}
-                          className={`p-2.5 px-3 rounded-2xl text-xs border transition-all text-left flex items-center justify-between font-light ${
-                            isSel
+                          className={`p-2.5 px-3 rounded-2xl text-xs border transition-all text-left flex items-center justify-between font-light ${isSel
                               ? 'border-[#1944F1] bg-blue-50/70 text-[#1944F1] shadow-2xs'
                               : 'border-slate-100 bg-[#F8FAFC] text-slate-600 hover:bg-slate-100'
-                          }`}
+                            }`}
                         >
                           <span className="truncate font-light">{opt.label}</span>
                           {isSel && <Check className="w-3.5 h-3.5 text-[#1944F1] shrink-0" />}
@@ -606,7 +698,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                   </div>
 
                   {/* Quick price chips */}
-                  <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
+                  <div className="grid grid-cols-2 gap-2 mb-2">
                     {[
                       { label: 'Under ₹500', min: '', max: '500' },
                       { label: '₹500 - ₹1,000', min: '500', max: '1000' },
@@ -627,11 +719,10 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                               setMaxPrice(preset.max);
                             }
                           }}
-                          className={`px-3 py-1.5 rounded-full text-xs shrink-0 whitespace-nowrap border transition-all font-light ${
-                            isPreset
+                          className={`py-2 px-3 rounded-2xl text-xs border transition-all text-center font-light ${isPreset
                               ? 'bg-[#1944F1] text-white border-[#1944F1] shadow-2xs'
                               : 'bg-[#F8FAFC] border-slate-200 text-slate-600 hover:bg-slate-100'
-                          }`}
+                            }`}
                         >
                           {preset.label}
                         </button>
@@ -677,11 +768,10 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                           key={cat.id}
                           type="button"
                           onClick={() => setActiveTab(cat.id)}
-                          className={`px-3.5 py-2 rounded-2xl text-xs border transition-all font-light ${
-                            isSel
+                          className={`px-3.5 py-2 rounded-2xl text-xs border transition-all font-light ${isSel
                               ? 'bg-[#1944F1] text-white border-[#1944F1] shadow-2xs'
                               : 'bg-[#F8FAFC] border-slate-200 text-slate-600 hover:bg-slate-100'
-                          }`}
+                            }`}
                         >
                           {cat.label}
                         </button>
@@ -709,11 +799,10 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                           key={cond.id}
                           type="button"
                           onClick={() => setSelectedCondition(cond.id)}
-                          className={`px-3.5 py-2 rounded-2xl text-xs border transition-all font-light ${
-                            isSel
+                          className={`px-3.5 py-2 rounded-2xl text-xs border transition-all font-light ${isSel
                               ? 'bg-[#1944F1] text-white border-[#1944F1] shadow-2xs'
                               : 'bg-[#F8FAFC] border-slate-200 text-slate-600 hover:bg-slate-100'
-                          }`}
+                            }`}
                         >
                           {cond.label}
                         </button>
@@ -749,7 +838,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
 
       {/* 4. PRODUCT DETAILS BOTTOM DRAWER */}
       <AnimatePresence>
-        {selectedProduct && (
+        {!onSelectProduct && selectedProduct && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -791,9 +880,6 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                     alt={selectedProduct.title}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-md px-3.5 py-1 rounded-xl text-base font-extrabold text-[#1944F1] shadow-xs">
-                    {formatRupeePrice(selectedProduct.price)}
-                  </div>
                   <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider text-slate-700 shadow-2xs">
                     {selectedProduct.condition || 'LIKE NEW'}
                   </div>
@@ -804,6 +890,9 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                   <h2 className="text-base font-bold text-slate-900 font-sans leading-snug">
                     {selectedProduct.title}
                   </h2>
+                  <div className="text-lg font-bold text-slate-900 mt-1">
+                    {formatRupeePrice(selectedProduct.price)}
+                  </div>
                   {(selectedProduct.location || selectedProduct.campusName || selectedProduct.universityName) && (
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1 font-medium">
                       <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />

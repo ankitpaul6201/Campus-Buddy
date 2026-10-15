@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
-import { apiGetMe, apiLogout, getStoredUser, getAuthToken, fetchMyAds } from './lib/api';
+import { apiGetMe, apiLogout, getStoredUser, getAuthToken, fetchMyAds, fetchNotifications, API_BASE_URL } from './lib/api';
+import { initSocketClient, disconnectSocket, subscribeToNewNotifications, subscribeToUnreadCount } from './lib/socket';
 import SplashScreen from './components/SplashScreen';
 import WelcomeScreen from './components/WelcomeScreen';
 import LoginScreen from './components/LoginScreen';
@@ -15,12 +16,61 @@ import MyAdsScreen from './components/MyAdsScreen';
 import ProfileScreen from './components/ProfileScreen';
 import WishlistScreen from './components/WishlistScreen';
 import NotificationsScreen from './components/NotificationsScreen';
+import ProductDetailsScreen from './components/ProductDetailsScreen';
+import SellerInfoScreen from './components/SellerInfoScreen';
 import UniversityOnboarding from './components/UniversityOnboarding';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('welcome');
+  const [currentScreen, setCurrentScreen] = useState(() => {
+    const user = getStoredUser();
+    const token = getAuthToken();
+    return (user && token) ? 'main' : 'welcome';
+  });
   const [activeNav, setActiveNav] = useState('home');
-  const [favorites, setFavorites] = useState([]);
+  const [previousNav, setPreviousNav] = useState('home');
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedSeller, setSelectedSeller] = useState(null);
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const saved = localStorage.getItem('campus_favorites');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return [];
+
+      // Collect known product IDs from local caches if present
+      let knownIds = null;
+      try {
+        const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
+        const userCached = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
+        if (cached.length > 0 || userCached.length > 0) {
+          knownIds = new Set([
+            ...cached.map(p => String(p._id || p.id)),
+            ...userCached.map(p => String(p._id || p.id))
+          ]);
+        }
+      } catch {}
+
+      return parsed.filter(id => {
+        if (!id) return false;
+        const str = String(id).trim();
+        if (str === '' || str === 'null' || str === 'undefined' || str === 'card-1' || str === 'card-2' || str === '1') {
+          return false;
+        }
+        if (knownIds && knownIds.size > 0) {
+          return knownIds.has(str);
+        }
+        return true;
+      });
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('campus_favorites', JSON.stringify(favorites));
+    } catch {}
+  }, [favorites]);
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef = useRef(0);
 
@@ -28,9 +78,19 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => getStoredUser());
   const [authLoading, setAuthLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
-  const [userAds, setUserAds] = useState([]);
+  const [activeNotificationToast, setActiveNotificationToast] = useState(null);
+  const [userAds, setUserAds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
+    } catch {
+      return [];
+    }
+  });
   const [activeChatTarget, setActiveChatTarget] = useState(null);
   const [showSplash, setShowSplash] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(15);
+  const [loadingStatusText, setLoadingStatusText] = useState('Starting Campus Buddy...');
+  const [homeDataReady, setHomeDataReady] = useState(false);
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -39,53 +99,145 @@ export default function App() {
     }
   }, []);
 
-  // Quick splash display timer
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-    }, 600); // 600ms snappy entrance splash
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Restore session from MongoDB Atlas on mount
+  // Drive progress bar smoothly during app boot
   useEffect(() => {
     let isMounted = true;
+
+    // Smoothly tick progress upwards while waiting for network requests
+    const progressInterval = setInterval(() => {
+      setLoadingProgress(prev => {
+        if (prev < 35) return prev + 4;
+        if (prev < 65) return prev + 2.5;
+        if (prev < 88) return prev + 1;
+        return prev;
+      });
+    }, 100);
+
     const initAuth = async () => {
+      setLoadingStatusText('Connecting to Campus Buddy...');
       const token = getAuthToken();
       if (token) {
         try {
+          setLoadingStatusText('Verifying session...');
           const user = await apiGetMe();
           if (isMounted) {
             if (user) {
               setCurrentUser(user);
               setCurrentScreen('main');
+              setLoadingStatusText('Loading campus marketplace...');
+              setLoadingProgress(prev => Math.max(prev, 60));
               fetchMyAds().then(ads => {
                 if (isMounted && Array.isArray(ads)) setUserAds(ads);
               }).catch(() => {});
             } else {
               setCurrentUser(null);
               setCurrentScreen('welcome');
+              setHomeDataReady(true);
             }
           }
         } catch {
           if (isMounted) {
             setCurrentUser(null);
             setCurrentScreen('welcome');
+            setHomeDataReady(true);
           }
         }
       } else {
         if (isMounted) {
           setCurrentUser(null);
           setCurrentScreen('welcome');
+          setHomeDataReady(true);
         }
       }
-      if (isMounted) setAuthLoading(false);
     };
 
     initAuth();
-    return () => { isMounted = false; };
+
+    // Safety timeout: ensure loading screen gracefully resolves even with poor connection
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) {
+        setHomeDataReady(true);
+      }
+    }, 3800);
+
+    return () => { 
+      isMounted = false;
+      clearInterval(progressInterval);
+      clearTimeout(safetyTimer);
+    };
   }, []);
+
+  // When home data and authentication are completely ready, transition loading bar to 100% and hide splash
+  useEffect(() => {
+    if (!homeDataReady) return;
+
+    setLoadingProgress(100);
+    setLoadingStatusText('Ready!');
+
+    const hideTimer = setTimeout(() => {
+      setShowSplash(false);
+      setAuthLoading(false);
+    }, 450);
+
+    return () => clearTimeout(hideTimer);
+  }, [homeDataReady]);
+
+  // Keep-alive heartbeat: Pings backend /api/health every 9 minutes while app is open to prevent cloud host sleep
+  useEffect(() => {
+    const pingBackend = () => {
+      fetch(`${API_BASE_URL}/health`, {
+        headers: { 'x-client-heartbeat': 'true' }
+      }).catch(() => {});
+    };
+
+    // Ping every 9 minutes (540,000 ms)
+    const heartbeatTimer = setInterval(pingBackend, 9 * 60 * 1000);
+    return () => clearInterval(heartbeatTimer);
+  }, []);
+
+  // Real-Time WebSockets & Notifications Listener
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!currentUser || !token) {
+      disconnectSocket();
+      return;
+    }
+
+    // 1. Initialize real-time Socket.io with user's JWT
+    initSocketClient(token);
+
+    // 2. Load existing notifications from MongoDB
+    fetchNotifications().then(res => {
+      if (res && Array.isArray(res.notifications)) {
+        setNotifications(res.notifications);
+      }
+    }).catch(() => {});
+
+    // 3. Listen for live incoming notifications
+    const unsubNotif = subscribeToNewNotifications((newNotif) => {
+      if (!newNotif) return;
+      setNotifications(prev => [
+        newNotif, 
+        ...prev.filter(n => (n._id || n.id) !== (newNotif._id || newNotif.id))
+      ]);
+
+      // Pop floating in-app notification banner toast
+      setActiveNotificationToast(newNotif);
+      setTimeout(() => {
+        setActiveNotificationToast(prev => ((prev?._id || prev?.id) === (newNotif._id || newNotif.id) ? null : prev));
+      }, 5000);
+    });
+
+    // 4. Listen for live unread badge updates
+    const unsubCount = subscribeToUnreadCount(({ unreadCount }) => {
+      // Unread count synced via socket
+    });
+
+    return () => {
+      unsubNotif();
+      unsubCount();
+    };
+  }, [currentUser]);
 
   // Back button / Left-swipe event listener for Android
   useEffect(() => {
@@ -93,7 +245,12 @@ export default function App() {
 
     const backListener = CapApp.addListener('backButton', () => {
       if (currentScreen === 'main') {
-        if (activeNav !== 'home') {
+        if (activeNav === 'seller-info') {
+          setActiveNav('product-details');
+        } else if (activeNav === 'product-details') {
+          setActiveNav(previousNav || 'home');
+          setSelectedProduct(null);
+        } else if (activeNav !== 'home') {
           // Redirect to home screen first if on another screen!
           setActiveNav('home');
         } else {
@@ -124,20 +281,26 @@ export default function App() {
     return () => {
       backListener.then(h => h.remove());
     };
-  }, [currentScreen, activeNav]);
+  }, [currentScreen, activeNav, previousNav]);
 
   const primaryColor = '#1944F1';
   const inactiveColor = '#94A3B8';
 
   const handleLogout = () => {
+    disconnectSocket();
     apiLogout();
     setCurrentUser(null);
+    setNotifications([]);
     setCurrentScreen('welcome');
   };
 
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
     setCurrentScreen('main');
+    initSocketClient(getAuthToken());
+    fetchNotifications().then(res => {
+      if (res && Array.isArray(res.notifications)) setNotifications(res.notifications);
+    }).catch(() => {});
     fetchMyAds().then(ads => {
       if (Array.isArray(ads)) setUserAds(ads);
     }).catch(() => {});
@@ -162,6 +325,18 @@ export default function App() {
     isVerified: Boolean(currentUser.isVerified ?? isVerifiedLocal),
     studentIdUrl: currentUser.studentIdUrl || localStorage.getItem('user_student_id_url') || '',
   } : null;
+
+  // Handle navigating to the separate Product Details Screen
+  const handleSelectProduct = (product) => {
+    setSelectedProduct(product);
+    setPreviousNav(activeNav);
+    setActiveNav('product-details');
+  };
+
+  const handleProductDetailBack = () => {
+    setActiveNav(previousNav || 'home');
+    setSelectedProduct(null);
+  };
 
   // Show bottom nav bar only for main tab screens and NEVER during splash / loading screen
   const showBottomNav = !authLoading && !showSplash && currentScreen === 'main' && ['home', 'chats', 'sell', 'myads', 'profile'].includes(activeNav);
@@ -223,6 +398,23 @@ export default function App() {
               >
                 Connecting Students Safely
               </motion.p>
+
+              {/* Bottom Loading Progress Bar */}
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25, duration: 0.5 }}
+                className="absolute bottom-12 left-0 right-0 px-8 flex flex-col items-center max-w-xs mx-auto z-20"
+              >
+                {/* Progress bar track */}
+                <div className="w-full h-1.5 bg-blue-950/40 rounded-full overflow-hidden p-[1px] shadow-inner backdrop-blur-xs border border-white/15">
+                  <motion.div 
+                    className="h-full bg-gradient-to-r from-blue-300 via-white to-blue-100 rounded-full shadow-[0_0_12px_rgba(255,255,255,0.85)]"
+                    style={{ width: `${Math.min(100, Math.max(5, loadingProgress))}%` }}
+                    transition={{ ease: "easeOut", duration: 0.25 }}
+                  />
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -259,11 +451,52 @@ export default function App() {
                 setFavorites={setFavorites}
                 notifications={notifications}
                 userAds={userAds}
+                onSelectProduct={handleSelectProduct}
                 onOpenChat={(target) => {
                   setActiveChatTarget(target);
                   setActiveNav('chats');
                 }}
                 onNavigate={(screen) => setCurrentScreen(screen)} 
+                onInitialLoadComplete={() => setHomeDataReady(true)}
+              />
+            )}
+            {activeNav === 'product-details' && selectedProduct && (
+              <ProductDetailsScreen
+                key="product-details"
+                product={selectedProduct}
+                user={userForScreens}
+                favorites={favorites}
+                setFavorites={setFavorites}
+                userAds={userAds}
+                setUserAds={setUserAds}
+                onNavigateBack={handleProductDetailBack}
+                onViewSellerInfo={(sellerData) => {
+                  setSelectedSeller(sellerData);
+                  setActiveNav('seller-info');
+                  window.scrollTo(0, 0);
+                }}
+                onOpenChat={(target) => {
+                  setActiveChatTarget(target);
+                  setActiveNav('chats');
+                }}
+                onManageMyAds={() => {
+                  setActiveNav('myads');
+                  setSelectedProduct(null);
+                }}
+              />
+            )}
+            {activeNav === 'seller-info' && (
+              <SellerInfoScreen
+                key="seller-info"
+                seller={selectedSeller}
+                product={selectedProduct}
+                user={userForScreens}
+                userAds={userAds}
+                onNavigateBack={() => setActiveNav('product-details')}
+                onOpenChat={(target) => {
+                  setActiveChatTarget(target);
+                  setActiveNav('chats');
+                }}
               />
             )}
             {activeNav === 'chats' && (
@@ -306,6 +539,7 @@ export default function App() {
                 notifications={notifications}
                 userAds={userAds}
                 setUserAds={setUserAds}
+                onSelectProduct={handleSelectProduct}
                 onNavigateBack={() => setActiveNav('home')} 
               />
             )}
@@ -331,6 +565,12 @@ export default function App() {
                 favorites={favorites}
                 setFavorites={setFavorites}
                 notifications={notifications}
+                userAds={userAds}
+                onSelectProduct={handleSelectProduct}
+                onOpenChat={(target) => {
+                  setActiveChatTarget(target);
+                  setActiveNav('chats');
+                }}
                 onNavigateBack={() => setActiveNav('home')}
               />
             )}
@@ -343,6 +583,11 @@ export default function App() {
                 favorites={favorites}
                 notifications={notifications}
                 setNotifications={setNotifications}
+                onSelectProduct={handleSelectProduct}
+                onOpenChat={(target) => {
+                  setActiveChatTarget(target);
+                  setActiveNav('chats');
+                }}
                 onNavigateBack={() => setActiveNav('home')}
               />
             )}
@@ -502,6 +747,45 @@ export default function App() {
           </motion.div>
         </div>
       )}
+
+      {/* Floating Real-Time In-App Push Notification Banner Toast */}
+      <AnimatePresence>
+        {activeNotificationToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -30, scale: 0.95 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            onClick={() => {
+              if (activeNotificationToast.type === 'message') {
+                setActiveNav('chats');
+              } else {
+                setActiveNav('notifications');
+              }
+              setActiveNotificationToast(null);
+            }}
+            className="fixed top-4 left-4 right-4 max-w-md mx-auto z-50 bg-slate-900/95 text-white p-3.5 rounded-2xl shadow-2xl border border-slate-800 backdrop-blur-md cursor-pointer flex items-center gap-3 active:scale-98 transition-all"
+          >
+            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shrink-0 shadow-xs">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-white truncate">
+                  {activeNotificationToast.title}
+                </p>
+                <span className="text-[10px] text-blue-300 font-medium">Just now</span>
+              </div>
+              <p className="text-[11px] text-slate-300 truncate mt-0.5">
+                {activeNotificationToast.message}
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

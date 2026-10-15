@@ -33,10 +33,6 @@ const userSchema = new mongoose.Schema({
   isVerified: {
     type: Boolean,
     default: false
-  },
-  clerkId: {
-    type: String,
-    default: ''
   }
 }, { timestamps: true });
 

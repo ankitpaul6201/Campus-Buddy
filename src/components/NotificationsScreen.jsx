@@ -5,14 +5,18 @@ import {
   Bell, 
   MessageSquare, 
   Tag, 
-  ShieldCheck, 
-  CheckCheck, 
   Trash2, 
   Sparkles,
   ShoppingBag,
-  TrendingDown,
-  Info
+  Heart,
+  CheckCheck
 } from 'lucide-react';
+import { 
+  markNotificationAsRead, 
+  markAllNotificationsAsRead, 
+  deleteNotificationApi, 
+  clearAllNotificationsApi 
+} from '../lib/api';
 
 export default function NotificationsScreen({ 
   user, 
@@ -20,35 +24,119 @@ export default function NotificationsScreen({
   setActiveNav, 
   notifications = [],
   setNotifications,
-  onNavigateBack 
+  onNavigateBack,
+  onOpenChat,
+  onSelectProduct
 }) {
   const [activeFilter, setActiveFilter] = useState('all');
 
-  const primaryColor = '#1944F1';
-  const inactiveColor = '#94A3B8';
   const uploadedHeartPath = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z";
 
-  const clearAllNotifications = () => {
+  const clearAllNotifications = async () => {
     setNotifications([]);
+    await clearAllNotificationsApi();
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+  const markAllAsRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true, unread: false })));
+    await markAllNotificationsAsRead();
   };
 
-  const deleteNotification = (id, e) => {
+  const deleteNotification = async (id, e) => {
     e.stopPropagation();
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    setNotifications(prev => prev.filter(n => (n._id || n.id) !== id));
+    await deleteNotificationApi(id);
   };
 
-  const filteredNotifications = notifications.filter(n => {
-    if (activeFilter === 'unread') return n.unread;
+  const handleNotificationClick = async (n) => {
+    const notifId = n._id || n.id;
+    // Mark as read in state & backend
+    if (!n.read && n.unread !== false) {
+      setNotifications(prev => prev.map(item => 
+        (item._id || item.id) === notifId ? { ...item, read: true, unread: false } : item
+      ));
+      markNotificationAsRead(notifId);
+    }
+
+    // Smart 1-tap navigation based on notification type
+    if (n.type === 'message') {
+      if (onOpenChat && n.sender?._id) {
+        onOpenChat({
+          sellerId: n.sender._id,
+          productId: n.product?._id || n.productId,
+          sellerName: n.sender.fullName,
+          productTitle: n.product?.title,
+          avatar: n.sender.avatar
+        });
+      } else if (setActiveNav) {
+        setActiveNav('chats');
+      }
+    } else if (n.type === 'like' || n.type === 'buy_intent') {
+      if (n.product && onSelectProduct) {
+        onSelectProduct(n.product);
+      } else if (setActiveNav) {
+        setActiveNav('myads');
+      }
+    } else if (n.actionTab && setActiveNav) {
+      setActiveNav(n.actionTab);
+    }
+  };
+
+  const formatNotifMeta = (n) => {
+    const isUnread = !n.read && n.unread !== false;
+    let category = 'System';
+    let icon = Bell;
+    let iconBg = 'bg-slate-100 text-slate-700';
+
+    if (n.type === 'message') {
+      category = 'Chat';
+      icon = MessageSquare;
+      iconBg = 'bg-blue-100 text-[#1944F1]';
+    } else if (n.type === 'like') {
+      category = 'Marketplace';
+      icon = Heart;
+      iconBg = 'bg-rose-100 text-rose-600';
+    } else if (n.type === 'buy_intent') {
+      category = 'Marketplace';
+      icon = ShoppingBag;
+      iconBg = 'bg-emerald-100 text-emerald-700';
+    } else if (n.type === 'offer') {
+      category = 'Marketplace';
+      icon = Tag;
+      iconBg = 'bg-amber-100 text-amber-700';
+    }
+
+    let timeStr = 'Just now';
+    if (n.createdAt) {
+      try {
+        const d = new Date(n.createdAt);
+        timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch {}
+    } else if (n.time) {
+      timeStr = n.time;
+    }
+
+    return {
+      ...n,
+      isUnread,
+      category: n.category || category,
+      icon,
+      iconBg,
+      timeStr
+    };
+  };
+
+  const processedNotifications = notifications.map(formatNotifMeta);
+
+  const filteredNotifications = processedNotifications.filter(n => {
+    if (activeFilter === 'unread') return n.isUnread;
     if (activeFilter === 'marketplace') return n.category === 'Marketplace';
     if (activeFilter === 'system') return n.category === 'System';
+    if (activeFilter === 'chat') return n.category === 'Chat';
     return true;
   });
 
-  const unreadCount = notifications.filter(n => n.unread).length;
+  const unreadCount = processedNotifications.filter(n => n.isUnread).length;
 
   return (
     <motion.div 
@@ -61,15 +149,15 @@ export default function NotificationsScreen({
       {/* Scrollable Main Content */}
       <div className="flex-1 overflow-y-auto pb-28 space-y-5 bg-white">
         
-        {/* 1. Header Bar: Left Back Button + Logo + Title - BROUGHT DOWN CLEANLY WITH TOP SAFE PADDING */}
+        {/* 1. Header Bar: Left Back Button + Logo + Title */}
         <div className="pt-12 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-30">
           <div className="flex items-center gap-3">
             <button
               onClick={() => onNavigateBack ? onNavigateBack() : (setActiveNav && setActiveNav('home'))}
-              className="w-11 h-11 min-w-[44px] max-w-[44px] min-h-[44px] max-h-[44px] rounded-full bg-[#F5F3F3] hover:bg-slate-200/60 border border-slate-100 flex items-center justify-center text-slate-900 transition-colors shrink-0"
+              className="w-11 h-11 min-w-[44px] max-w-[44px] min-h-[44px] max-h-[44px] rounded-full bg-[#F5F3F3] hover:bg-slate-200/60 border border-slate-100 flex items-center justify-center text-slate-900 transition-all duration-200 hover:-translate-x-1 active:-translate-x-1.5 active:scale-95 shrink-0 group"
               title="Back"
             >
-              <ArrowLeft className="w-5.5 h-5.5" />
+              <ArrowLeft className="w-5.5 h-5.5 transition-transform duration-200 group-hover:-translate-x-0.5 group-active:-translate-x-1" />
             </button>
             <div className="w-9 h-9 rounded-lg shrink-0 overflow-hidden">
               <img 
@@ -83,7 +171,7 @@ export default function NotificationsScreen({
             </span>
           </div>
 
-          {/* Right Header Action Button: Heart Wishlist Button (Bell Icon is HIDDEN on Notifications page) */}
+          {/* Right Header Action Button: Heart Wishlist Button */}
           <div className="flex items-center gap-2">
             <button 
               onClick={() => setActiveNav && setActiveNav('wishlist')}
@@ -100,25 +188,38 @@ export default function NotificationsScreen({
         {/* 2. Content Padding Wrapper */}
         <div className="px-5 space-y-4">
           
-          {/* Page Title & Clear All Action */}
+          {/* Page Title & Clear All / Mark Read Actions */}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-slate-900 font-sans tracking-tight">
                 Notifications
               </h1>
               <p className="text-xs text-slate-500 font-normal mt-0.5 leading-snug">
-                Stay updated on campus deals, chats, and alerts.
+                Stay updated on campus deals, chats, and alerts in real time.
               </p>
             </div>
 
-            {notifications.length > 0 && (
-              <button
-                onClick={clearAllNotifications}
-                className="text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-full transition-colors shrink-0"
-              >
-                Clear All
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllAsRead}
+                  className="text-xs font-semibold text-[#1944F1] hover:bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full transition-colors shrink-0 flex items-center gap-1"
+                  title="Mark all as read"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Mark Read</span>
+                </button>
+              )}
+
+              {notifications.length > 0 && (
+                <button
+                  onClick={clearAllNotifications}
+                  className="text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-full transition-colors shrink-0"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Filter Tabs */}
@@ -127,7 +228,7 @@ export default function NotificationsScreen({
               { id: 'all', label: `All (${notifications.length})` },
               { id: 'unread', label: `Unread (${unreadCount})` },
               { id: 'marketplace', label: 'Marketplace' },
-              { id: 'system', label: 'System' }
+              { id: 'chat', label: 'Chats' }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -148,24 +249,41 @@ export default function NotificationsScreen({
             {filteredNotifications.length > 0 ? (
               <div className="space-y-3 pt-1">
                 {filteredNotifications.map((n) => {
+                  const notifId = n._id || n.id;
                   const Icon = n.icon;
+                  const senderName = n.sender?.fullName || '';
+                  const senderAvatar = n.sender?.avatar;
+                  const productImage = (Array.isArray(n.product?.images) && n.product.images[0]) || n.product?.images;
+
                   return (
                     <motion.div
-                      key={n.id}
+                      key={notifId}
                       layout
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-                      onClick={() => setActiveNav && setActiveNav(n.actionTab)}
+                      onClick={() => handleNotificationClick(n)}
                       className={`p-4 rounded-3xl border transition-all cursor-pointer flex gap-3.5 relative group ${
-                        n.unread 
+                        n.isUnread 
                           ? 'bg-[#EEF2FF]/60 border-blue-200 shadow-xs' 
                           : 'bg-[#F5F3F3] border-slate-100/90 hover:shadow-md'
                       }`}
                     >
-                      {/* Left Icon */}
-                      <div className={`w-10 h-10 rounded-2xl ${n.iconBg} flex items-center justify-center shrink-0 shadow-2xs`}>
-                        <Icon className="w-5 h-5" />
+                      {/* Left Icon / Avatar */}
+                      <div className="relative shrink-0">
+                        {senderAvatar && !['/avatar.svg', '/avatar-blue.svg'].includes(senderAvatar) ? (
+                          <div className="w-10 h-10 rounded-2xl overflow-hidden border border-slate-200">
+                            <img src={senderAvatar} alt={senderName} className="w-full h-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className={`w-10 h-10 rounded-2xl ${n.iconBg} flex items-center justify-center shrink-0 shadow-2xs`}>
+                            <Icon className="w-5 h-5" />
+                          </div>
+                        )}
+                        {/* Sub badge icon */}
+                        <div className={`w-4 h-4 rounded-full ${n.iconBg} absolute -bottom-1 -right-1 flex items-center justify-center ring-2 ring-white`}>
+                          <Icon className="w-2.5 h-2.5" />
+                        </div>
                       </div>
 
                       {/* Content */}
@@ -182,7 +300,7 @@ export default function NotificationsScreen({
 
                         <div className="flex items-center gap-2 mt-2">
                           <span className="text-[10px] text-slate-400 font-medium">
-                            {n.time}
+                            {n.timeStr}
                           </span>
                           <span className="text-[10px] text-slate-300">·</span>
                           <span className="text-[10px] font-semibold text-[#1944F1]">
@@ -191,9 +309,16 @@ export default function NotificationsScreen({
                         </div>
                       </div>
 
+                      {/* Optional Right Product Thumbnail */}
+                      {productImage && (
+                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-slate-200/80 shrink-0 self-center">
+                          <img src={productImage} alt="Product" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+
                       {/* Right Delete Button */}
                       <button
-                        onClick={(e) => deleteNotification(n.id, e)}
+                        onClick={(e) => deleteNotification(notifId, e)}
                         className="w-7 h-7 rounded-full bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center shrink-0 border border-slate-200/60 transition-colors absolute top-3.5 right-3.5 opacity-0 group-hover:opacity-100"
                         title="Delete notification"
                       >
@@ -201,7 +326,7 @@ export default function NotificationsScreen({
                       </button>
 
                       {/* Unread Indicator Dot */}
-                      {n.unread && (
+                      {n.isUnread && (
                         <span className="absolute top-4 right-4 w-2.5 h-2.5 rounded-full bg-[#1944F1] ring-2 ring-white" />
                       )}
                     </motion.div>
@@ -228,7 +353,7 @@ export default function NotificationsScreen({
                     No Notifications
                   </h3>
                   <p className="text-xs text-slate-400 font-normal leading-relaxed">
-                    You are all caught up! New price drops, chats, and account updates will show up here.
+                    You are all caught up! New chats, product likes, and campus updates will show up here in real time.
                   </p>
                 </div>
 

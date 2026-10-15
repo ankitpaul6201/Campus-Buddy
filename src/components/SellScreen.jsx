@@ -7,15 +7,18 @@ import {
   X, 
   CheckCircle2,
   Trash2,
-  Bell
+  Bell,
+  Check
 } from 'lucide-react';
 
-import { createProductListing, formatRupeePrice } from '../lib/api';
+import { createProductListing, formatRupeePrice, updateAdLikes } from '../lib/api';
+import CustomPopup from './CustomPopup';
 
 export default function SellScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], setUserAds, onAdCreated, onNavigateBack }) {
   const [photos, setPhotos] = useState([]);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [condition, setCondition] = useState('Like New');
   const [price, setPrice] = useState('');
   const [description, setDescription] = useState('');
@@ -24,6 +27,21 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showWishlistModal, setShowWishlistModal] = useState(false);
+  const [popupConfig, setPopupConfig] = useState(null);
+
+  const cleanPriceValue = parseFloat(String(price).replace(/[^0-9.]/g, ''));
+  const isFormComplete = Boolean(
+    photos.length > 0 &&
+    title.trim() &&
+    category.trim() &&
+    condition.trim() &&
+    String(price).trim() &&
+    !isNaN(cleanPriceValue) &&
+    cleanPriceValue > 0 &&
+    cleanPriceValue <= 200000 &&
+    description.trim() &&
+    location.trim()
+  );
 
   const wishlistedProducts = (userAds || []).filter(item => favorites.includes(item.id || item._id));
 
@@ -50,7 +68,7 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          const maxDim = 900;
+          const maxDim = 1000;
           if (width > maxDim || height > maxDim) {
             if (width > height) {
               height = Math.round((height * maxDim) / width);
@@ -64,7 +82,18 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.82));
+
+          // Prefer WebP for optimal compression, falling back to JPEG
+          let compressed;
+          try {
+            compressed = canvas.toDataURL('image/webp', 0.75);
+            if (!compressed.startsWith('data:image/webp')) {
+              compressed = canvas.toDataURL('image/jpeg', 0.75);
+            }
+          } catch {
+            compressed = canvas.toDataURL('image/jpeg', 0.75);
+          }
+          resolve(compressed);
         };
         img.onerror = () => resolve(e.target.result);
         img.src = e.target.result;
@@ -74,15 +103,41 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
   };
 
   const handlePhotoUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    try {
-      const dataUrls = await Promise.all(files.map(fileToDataUrl));
-      setPhotos(prev => [...prev, ...dataUrls].slice(0, 10));
-    } catch {
-      const fallbackUrls = files.map(file => URL.createObjectURL(file));
-      setPhotos(prev => [...prev, ...fallbackUrls].slice(0, 10));
+    const incomingFiles = Array.from(e.target.files || []);
+    if (incomingFiles.length === 0) return;
+
+    if (photos.length >= 5) {
+      setPopupConfig({
+        title: 'Photo Limit Reached',
+        message: 'You can upload a maximum of 5 photos per listing.',
+        type: 'warning',
+        confirmText: 'Got it'
+      });
+      if (e.target) e.target.value = '';
+      return;
     }
+
+    const availableSlots = 5 - photos.length;
+    let filesToProcess = incomingFiles;
+    if (incomingFiles.length > availableSlots) {
+      filesToProcess = incomingFiles.slice(0, availableSlots);
+      setPopupConfig({
+        title: 'Photo Limit',
+        message: `Only up to 5 photos are allowed. Adding the first ${availableSlots} photo(s).`,
+        type: 'warning',
+        confirmText: 'Got it'
+      });
+    }
+
+    try {
+      const dataUrls = await Promise.all(filesToProcess.map(fileToDataUrl));
+      setPhotos(prev => [...prev, ...dataUrls].slice(0, 5));
+    } catch {
+      const fallbackUrls = filesToProcess.map(file => URL.createObjectURL(file));
+      setPhotos(prev => [...prev, ...fallbackUrls].slice(0, 5));
+    }
+
+    if (e.target) e.target.value = '';
   };
 
   const removePhoto = (index) => {
@@ -91,31 +146,101 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!title.trim()) {
-      alert('Please enter a listing title');
+
+    if (photos.length === 0) {
+      setPopupConfig({
+        title: 'Photos Required',
+        message: 'Please upload at least one photo of your item before posting.',
+        type: 'warning',
+        confirmText: 'Got it'
+      });
       return;
     }
+
+    if (!title.trim()) {
+      setPopupConfig({
+        title: 'Title Required',
+        message: 'Please enter a title for your listing.',
+        type: 'warning',
+        confirmText: 'Got it'
+      });
+      return;
+    }
+
+    if (!category.trim()) {
+      setPopupConfig({
+        title: 'Category Required',
+        message: 'Please select a category for your item.',
+        type: 'warning',
+        confirmText: 'Got it'
+      });
+      return;
+    }
+
+    if (!condition.trim()) {
+      setPopupConfig({
+        title: 'Condition Required',
+        message: 'Please select the condition of your item.',
+        type: 'warning',
+        confirmText: 'Got it'
+      });
+      return;
+    }
+
     const cleanPrice = parseFloat(String(price).replace(/[^0-9.]/g, ''));
-    if (isNaN(cleanPrice) || cleanPrice < 0) {
-      alert('Please enter a valid price');
+    if (!String(price).trim() || isNaN(cleanPrice) || cleanPrice <= 0) {
+      setPopupConfig({
+        title: 'Valid Price Required',
+        message: 'Please enter a valid price for your listing.',
+        type: 'warning',
+        confirmText: 'Got it'
+      });
+      return;
+    }
+
+    if (cleanPrice > 200000) {
+      setPopupConfig({
+        title: 'Price Limit Exceeded',
+        message: 'Only items up to ₹2,00,000 can be listed.',
+        type: 'warning',
+        confirmText: 'Got it'
+      });
+      return;
+    }
+
+    if (!description.trim()) {
+      setPopupConfig({
+        title: 'Description Required',
+        message: 'Please enter a description for your listing.',
+        type: 'warning',
+        confirmText: 'Got it'
+      });
+      return;
+    }
+
+    if (!location.trim()) {
+      setPopupConfig({
+        title: 'Location Required',
+        message: 'Please enter a pickup location for your item.',
+        type: 'warning',
+        confirmText: 'Got it'
+      });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const finalImages = photos.length > 0 
-        ? photos 
-        : ['https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=600&q=80'];
-
+      const finalImages = photos.slice(0, 5);
       const resolvedUni = user?.universityName || user?.university?.name || 'Campus Member';
 
       const payload = {
         title: title.trim(),
-        description: description.trim() || 'No description provided',
+        description: description.trim(),
         price: cleanPrice,
-        category: category || 'Other',
-        condition: condition || 'Like New',
-        location: location.trim() || resolvedUni,
+        category: category.trim(),
+        condition: condition.trim(),
+        location: location.trim(),
+        isNegotiable: Boolean(isNegotiable),
         images: finalImages,
         campusName: resolvedUni,
         universityName: resolvedUni
@@ -146,7 +271,12 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
       }, 900);
     } catch (err) {
       console.error('Failed to post ad:', err);
-      alert('Failed to post ad: ' + (err.message || 'Please check your connection'));
+      setPopupConfig({
+        title: 'Failed to Post Ad',
+        message: err.message || 'Please check your connection and try again.',
+        type: 'danger',
+        confirmText: 'OK'
+      });
       setIsSubmitting(false);
     }
   };
@@ -183,7 +313,8 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
           {/* Header Right Action Icons (40px x 40px) */}
           <div className="flex items-center gap-2">
             <button 
-              onClick={() => setShowWishlistModal(true)}
+              onClick={() => setActiveNav && setActiveNav('wishlist')}
+              title="My Wishlist"
               className="w-10 h-10 min-w-[40px] max-w-[40px] min-h-[40px] max-h-[40px] rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-900 shadow-xs hover:bg-slate-200/60 transition-colors relative shrink-0"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" className="transition-all duration-200">
@@ -221,24 +352,31 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
           <form onSubmit={handleSubmit} className="space-y-4">
             
             {/* Upload Product Photos Box */}
-            <div className="w-full rounded-3xl border-2 border-dashed border-blue-200 bg-[#F5F7FF] p-6 flex flex-col items-center justify-center text-center relative hover:border-[#1944F1] transition-colors cursor-pointer group">
+            <div className={`w-full rounded-3xl border-2 border-dashed ${
+              photos.length >= 5 
+                ? 'border-slate-300 bg-slate-50 cursor-default' 
+                : 'border-blue-200 bg-[#F5F7FF] hover:border-[#1944F1] cursor-pointer'
+            } p-6 flex flex-col items-center justify-center text-center relative transition-colors group`}>
               <input 
                 type="file" 
                 multiple 
                 accept="image/*"
+                disabled={photos.length >= 5}
                 onChange={handlePhotoUpload} 
-                className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                className={`absolute inset-0 opacity-0 z-10 ${photos.length >= 5 ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
               />
               
-              <div className="w-13 h-13 rounded-full bg-[#E0EAFF] flex items-center justify-center text-[#1944F1] mb-3 group-hover:scale-110 transition-transform shadow-2xs">
+              <div className={`w-13 h-13 rounded-full ${
+                photos.length >= 5 ? 'bg-slate-200 text-slate-400' : 'bg-[#E0EAFF] text-[#1944F1] group-hover:scale-110'
+              } flex items-center justify-center mb-3 transition-transform shadow-2xs`}>
                 <Plus className="w-6 h-6 stroke-[2.5]" />
               </div>
 
-              <span className="text-sm font-semibold text-[#1944F1] font-sans">
-                Upload Product Photos
+              <span className={`text-sm font-semibold font-sans ${photos.length >= 5 ? 'text-slate-500' : 'text-[#1944F1]'}`}>
+                {photos.length >= 5 ? 'Maximum Photos Added' : 'Upload Product Photos'}
               </span>
               <span className="text-xs text-slate-400 font-normal mt-1">
-                Up to 10 photos supported
+                {photos.length > 0 ? `${photos.length}/5 photos uploaded` : 'Maximum 5 Photos Are Allowed'}
               </span>
 
               {/* Photos Preview Thumbnails */}
@@ -250,7 +388,8 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
                       <button
                         type="button"
                         onClick={() => removePhoto(idx)}
-                        className="absolute top-1 right-1 w-4 h-4 rounded-full bg-slate-900/80 text-white flex items-center justify-center text-[10px]"
+                        className="absolute top-1 right-1 w-4 h-4 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center text-[10px] transition-colors"
+                        title="Remove photo"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -276,24 +415,69 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
             </div>
 
             {/* Category Field */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 relative">
               <label className="text-xs font-semibold text-slate-800 font-sans block">
                 Category
               </label>
-              <div className="relative">
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-4 py-3.5 bg-[#F5F3F3] text-slate-900 rounded-2xl text-xs font-normal appearance-none focus:outline-none focus:ring-2 focus:ring-[#1944F1] border border-slate-100/80 cursor-pointer pr-10"
-                  required
-                >
-                  <option value="" disabled hidden>Select a category</option>
-                  {categories.map((cat, idx) => (
-                    <option key={idx} value={cat}>{cat}</option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-500 absolute right-4 top-3.5 pointer-events-none" />
-              </div>
+
+              {/* Custom Themed Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsCategoryOpen(!isCategoryOpen)}
+                className={`w-full px-4 py-3.5 bg-[#F5F3F3] rounded-2xl text-xs font-normal border transition-all flex items-center justify-between text-left ${
+                  isCategoryOpen 
+                    ? 'border-[#1944F1] ring-2 ring-blue-100 bg-white' 
+                    : 'border-slate-100/80 hover:bg-slate-200/50'
+                }`}
+              >
+                <span className={category ? 'text-slate-900 font-medium' : 'text-slate-400'}>
+                  {category || 'Select a category'}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isCategoryOpen ? 'rotate-180 text-[#1944F1]' : ''}`} />
+              </button>
+
+              {/* Custom Themed Popover Options Menu */}
+              <AnimatePresence>
+                {isCategoryOpen && (
+                  <>
+                    {/* Invisible backdrop to dismiss on click outside */}
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setIsCategoryOpen(false)} 
+                    />
+
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                      transition={{ duration: 0.16, ease: 'easeOut' }}
+                      className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl p-1.5 border border-slate-100 shadow-xl z-50 overflow-hidden max-h-60 overflow-y-auto no-scrollbar"
+                    >
+                      {categories.map((cat, idx) => {
+                        const isSelected = category === cat;
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setCategory(cat);
+                              setIsCategoryOpen(false);
+                            }}
+                            className={`w-full px-3.5 py-2.5 rounded-xl text-xs flex items-center justify-between text-left transition-colors ${
+                              isSelected
+                                ? 'bg-[#EEF2FF] text-[#1944F1] font-semibold'
+                                : 'text-slate-700 hover:bg-[#F5F3F3]'
+                            }`}
+                          >
+                            <span>{cat}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-[#1944F1] stroke-[2.5]" />}
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Condition Field */}
@@ -324,9 +508,11 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
 
             {/* Price Field */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-800 font-sans block">
-                Price
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-800 font-sans block">
+                  Price
+                </label>
+              </div>
               <div className="relative">
                 <span className="absolute left-4 top-3.5 text-xs text-slate-400 font-medium">₹</span>
                 <input 
@@ -334,10 +520,23 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   placeholder="e.g. 450"
-                  className="w-full pl-8 pr-4 py-3.5 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] border border-slate-100/80"
+                  className={`w-full pl-8 pr-4 py-3.5 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 border transition-all ${
+                    parseFloat(String(price).replace(/[^0-9.]/g, '')) > 200000 
+                      ? 'border-rose-300 focus:ring-rose-400' 
+                      : 'border-slate-100/80 focus:ring-[#1944F1]'
+                  }`}
                   required
                 />
               </div>
+              <p className={`text-[11px] font-normal transition-colors ${
+                parseFloat(String(price).replace(/[^0-9.]/g, '')) > 200000 
+                  ? 'text-rose-500 font-medium' 
+                  : 'text-slate-400'
+              }`}>
+                {parseFloat(String(price).replace(/[^0-9.]/g, '')) > 200000 
+                  ? 'Price exceeds limit: only items up to ₹2,00,000 can be listed' 
+                  : 'Only items up to ₹2,00,000 can be listed'}
+              </p>
             </div>
 
             {/* Description Field */}
@@ -402,13 +601,21 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
             <div className="pt-3">
               <button
                 type="submit"
-                disabled={isSubmitted}
-                className="w-full py-4 rounded-full bg-[#1944F1] hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                disabled={isSubmitted || isSubmitting}
+                className={`w-full py-4 rounded-full font-bold text-sm shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
+                  isFormComplete
+                    ? 'bg-[#1944F1] hover:bg-blue-700 text-white shadow-blue-500/20 cursor-pointer'
+                    : 'bg-slate-200 hover:bg-slate-300 text-slate-500 cursor-pointer'
+                }`}
               >
                 {isSubmitted ? (
                   <span className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-white animate-bounce" />
                     Listing Posted!
+                  </span>
+                ) : isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    Posting Listing...
                   </span>
                 ) : (
                   <span>Post Listing</span>
@@ -582,12 +789,16 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
                       <img src={item.image} alt={item.title} className="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0" />
                       <div>
                         <h4 className="text-xs font-semibold text-slate-900 line-clamp-1 font-sans">{item.title}</h4>
-                        <p className="text-xs font-bold text-[#1944F1] mt-0.5">{formatRupeePrice(item.price)}</p>
+                        <p className="text-xs font-bold text-black mt-0.5">{formatRupeePrice(item.price)}</p>
                         <p className="text-[10px] text-slate-400 font-normal">Seller: {item.sellerName}</p>
                       </div>
                     </div>
                     <button
-                      onClick={() => setFavorites(prev => prev.filter(id => id !== item.id))}
+                      onClick={() => {
+                        const targetId = item.id || item._id;
+                        updateAdLikes(targetId, false);
+                        setFavorites(prev => prev.filter(id => id !== item.id && id !== item._id));
+                      }}
                       className="w-8 h-8 rounded-full bg-white border border-slate-200 text-rose-500 hover:bg-rose-50 flex items-center justify-center shrink-0 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -599,6 +810,18 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Reusable Custom Alert / Popup Modal */}
+      <CustomPopup
+        isOpen={Boolean(popupConfig)}
+        title={popupConfig?.title}
+        message={popupConfig?.message}
+        type={popupConfig?.type || 'warning'}
+        confirmText={popupConfig?.confirmText || 'OK'}
+        isAlert={true}
+        onConfirm={() => setPopupConfig(null)}
+        onCancel={() => setPopupConfig(null)}
+      />
     </motion.div>
   );
 }

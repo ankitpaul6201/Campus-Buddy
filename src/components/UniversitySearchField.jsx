@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, Loader2, PlusCircle, CheckCircle2, AlertCircle } from 'lucide-react';
 import { searchUniversities } from '../services/universityService';
 import SearchResultTile from './SearchResultTile';
+import CustomPopup from './CustomPopup';
 
 export default function UniversitySearchField({ selectedUniversity, onSelectUniversity }) {
   const [query, setQuery] = useState(selectedUniversity ? selectedUniversity.name : '');
@@ -9,6 +10,7 @@ export default function UniversitySearchField({ selectedUniversity, onSelectUniv
   const [isSearching, setIsSearching] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [showRequestPopup, setShowRequestPopup] = useState(false);
 
   const debounceTimerRef = useRef(null);
 
@@ -64,7 +66,7 @@ export default function UniversitySearchField({ selectedUniversity, onSelectUniv
   };
 
   const handleRequestUniversity = () => {
-    alert('Coming Soon');
+    setShowRequestPopup(true);
   };
 
   return (
@@ -149,6 +151,18 @@ export default function UniversitySearchField({ selectedUniversity, onSelectUniv
           ) : null}
         </div>
       )}
+
+      {/* Custom Popup for Request University */}
+      <CustomPopup
+        isOpen={showRequestPopup}
+        title="Request University"
+        message="The university requesting feature is coming soon! Check back later."
+        confirmText="Got it"
+        type="info"
+        isAlert={true}
+        onConfirm={() => setShowRequestPopup(false)}
+        onCancel={() => setShowRequestPopup(false)}
+      />
     </div>
   );
 }

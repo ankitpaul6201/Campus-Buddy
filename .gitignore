@@ -70,6 +70,7 @@ website/scratch_parse.cjs
 website/next_f.txt
 website/page.html
 scratch/
+k6.exe
 
 # ========================
 # External References & Staging
@@ -82,4 +83,5 @@ google sans static/
 # ========================
 *.local
 pubspec.lock
+website/
 

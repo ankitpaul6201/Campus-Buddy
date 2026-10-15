@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Bell, 
   ChevronRight, 
+  ChevronDown,
   Heart,
   PackageCheck,
   ShieldCheck,
@@ -28,20 +29,46 @@ import {
   UserPen,
   School,
   Camera,
-  Calendar,
+  Calendar as CalendarIcon,
   GraduationCap,
   Upload,
   Eye,
   EyeOff
 } from 'lucide-react';
-import { uploadStudentId, apiUpdateProfile, apiUpdatePassword, formatRupeePrice } from '../lib/api';
+import { uploadStudentId, apiUpdateProfile, apiUpdatePassword, formatRupeePrice, getSellerRatings, apiDeleteAccount } from '../lib/api';
+import { Calendar } from './ui/calendar';
 const defaultAvatar = '/avatar-blue-2.svg';
+
+const ACADEMIC_YEAR_OPTIONS = [
+  { value: '1st Year', label: '1st Year (Freshman)' },
+  { value: '2nd Year', label: '2nd Year (Sophomore)' },
+  { value: '3rd Year', label: '3rd Year (Junior)' },
+  { value: '4th Year', label: '4th Year (Senior)' },
+  { value: "Postgraduate / Master's", label: "Postgraduate / Master's" },
+  { value: 'Ph.D. Scholar', label: 'Ph.D. Scholar' }
+];
 
 // Campus Buddy Profile Screen with default avatar and student info
 export default function ProfileScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], onNavigateBack, onLogout }) {
   const [showWishlistModal, setShowWishlistModal] = useState(false);
+  const [showDobCalendar, setShowDobCalendar] = useState(false);
+  const [isYearDropdownOpen, setIsYearDropdownOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null); // 'edit_profile', 'purchases', 'verification', 'security', 'support', 'terms', 'privacy', 'reviews'
   const [faqOpen, setFaqOpen] = useState(0);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  const yearDropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (yearDropdownRef.current && !yearDropdownRef.current.contains(event.target)) {
+        setIsYearDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Derived verification state
   const isUserVerified = Boolean(
@@ -50,14 +77,49 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
     localStorage.getItem('user_id_verified') === 'true'
   );
 
-  // Edit Profile Form State
-  const [editName, setEditName] = useState(user?.fullName || user?.name || '');
-  const [editUniversity, setEditUniversity] = useState(user?.universityName || '');
-  const [editDob, setEditDob] = useState(user?.dob || localStorage.getItem('user_dob') || '');
-  const [editCourse, setEditCourse] = useState(user?.course || localStorage.getItem('user_course') || '');
-  const [editYear, setEditYear] = useState(user?.year || localStorage.getItem('user_year') || '1st Year');
-  const [avatarPreview, setAvatarPreview] = useState(user?.avatar || null);
+  // Saved Profile State (Committed source of truth)
+  const [savedProfile, setSavedProfile] = useState(() => ({
+    fullName: localStorage.getItem('user_custom_fullname') || user?.fullName || user?.name || '',
+    dob: localStorage.getItem('user_dob') || user?.dob || '',
+    course: localStorage.getItem('user_course') || user?.course || '',
+    year: localStorage.getItem('user_year') || user?.year || '1st Year',
+    avatar: localStorage.getItem('user_custom_avatar') || user?.avatar || null
+  }));
+
+  // Sync savedProfile when user prop updates
+  useEffect(() => {
+    if (user) {
+      setSavedProfile({
+        fullName: localStorage.getItem('user_custom_fullname') || user?.fullName || user?.name || '',
+        dob: localStorage.getItem('user_dob') || user?.dob || '',
+        course: localStorage.getItem('user_course') || user?.course || '',
+        year: localStorage.getItem('user_year') || user?.year || '1st Year',
+        avatar: localStorage.getItem('user_custom_avatar') || user?.avatar || null
+      });
+    }
+  }, [user]);
+
+  // Draft Edit Form State (local to modal, never saved unless clicking Save Changes)
+  const [draftName, setDraftName] = useState(savedProfile.fullName);
+  const [draftDob, setDraftDob] = useState(savedProfile.dob);
+  const [draftCourse, setDraftCourse] = useState(savedProfile.course);
+  const [draftYear, setDraftYear] = useState(savedProfile.year);
+  const [draftAvatar, setDraftAvatar] = useState(savedProfile.avatar);
   const [profileSavedMessage, setProfileSavedMessage] = useState(false);
+
+  // When modal opens, initialize drafts to savedProfile; if user closes without saving, drafts are discarded!
+  useEffect(() => {
+    if (activeModal === 'student_info' || activeModal === 'edit_profile') {
+      setDraftName(savedProfile.fullName);
+      setDraftDob(savedProfile.dob);
+      setDraftCourse(savedProfile.course);
+      setDraftYear(savedProfile.year);
+      setDraftAvatar(savedProfile.avatar);
+      setShowDobCalendar(false);
+      setIsYearDropdownOpen(false);
+      setProfileSavedMessage(false);
+    }
+  }, [activeModal, savedProfile]);
 
   // Security Form State
   const [currentPass, setCurrentPass] = useState('');
@@ -81,14 +143,29 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    try {
+      await apiDeleteAccount();
+      setShowDeleteModal(false);
+      showToast('Account permanently deleted', 'success');
+      setTimeout(() => {
+        if (onLogout) onLogout();
+        else window.location.reload();
+      }, 1200);
+    } catch (err) {
+      showToast(err.message || 'Failed to delete account', 'error');
+      setIsDeletingAccount(false);
+    }
+  };
+
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setAvatarPreview(reader.result);
-        localStorage.setItem('user_custom_avatar', reader.result);
-        showToast("Profile picture updated!", "success");
+        // Only set preview in draft - DO NOT save until user clicks Save Changes!
+        setDraftAvatar(reader.result);
       };
       reader.readAsDataURL(file);
     }
@@ -97,44 +174,78 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
   const calculateAge = (dobString) => {
     if (!dobString) return null;
     const dob = new Date(dobString);
+    if (isNaN(dob.getTime())) return null;
     const diff_ms = Date.now() - dob.getTime();
     const age_dt = new Date(diff_ms);
     return Math.abs(age_dt.getUTCFullYear() - 1970);
   };
 
+  const formatDisplayDob = (dobString) => {
+    if (!dobString) return 'Select your date of birth';
+    try {
+      const parts = String(dobString).split('-');
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+      }
+      const d = new Date(dobString);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      return dobString;
+    } catch {
+      return dobString;
+    }
+  };
+
   const handleProfileSave = async (e) => {
     e.preventDefault();
     try {
-      if (editName.trim()) {
-        localStorage.setItem('user_custom_fullname', editName.trim());
-      }
-      if (editDob) localStorage.setItem('user_dob', editDob);
-      if (editCourse) localStorage.setItem('user_course', editCourse);
-      if (editYear) localStorage.setItem('user_year', editYear);
+      const finalName = draftName.trim() || savedProfile.fullName;
+      const finalDob = draftDob;
+      const finalCourse = draftCourse;
+      const finalYear = draftYear;
+      const finalAvatar = draftAvatar || savedProfile.avatar;
 
-      // Sync with backend API to save to MongoDB Atlas (college & email remain locked)
+      // 1. Commit to localStorage
+      if (finalName) localStorage.setItem('user_custom_fullname', finalName);
+      if (finalDob) localStorage.setItem('user_dob', finalDob);
+      if (finalCourse) localStorage.setItem('user_course', finalCourse);
+      if (finalYear) localStorage.setItem('user_year', finalYear);
+      if (finalAvatar) localStorage.setItem('user_custom_avatar', finalAvatar);
+
+      // 2. Commit to savedProfile state (now the main screen updates!)
+      setSavedProfile({
+        fullName: finalName,
+        dob: finalDob,
+        course: finalCourse,
+        year: finalYear,
+        avatar: finalAvatar
+      });
+
+      // 3. Persist to API
       await apiUpdateProfile({
-        fullName: editName.trim(),
-        dob: editDob,
-        course: editCourse,
-        year: editYear,
+        fullName: finalName,
+        dob: finalDob,
+        course: finalCourse,
+        year: finalYear,
+        ...(finalAvatar ? { avatar: finalAvatar } : {})
       });
 
       setProfileSavedMessage(true);
       showToast("Profile changes saved successfully!", "success");
-      setTimeout(() => setProfileSavedMessage(false), 3000);
+      setTimeout(() => {
+        setProfileSavedMessage(false);
+        setActiveModal(null);
+      }, 900);
     } catch (err) {
       console.error("Error saving profile changes:", err);
       showToast("Failed to save changes. Please try again.", "error");
     }
   };
 
-  const products = [
-    { id: 'card-1', title: 'Engineering Mathematics Vol 2', price: '₹450', sellerName: 'Rahul', image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80' },
-    { id: 'card-2', title: 'TI-84 Plus CE Graphing Calculator', price: '₹800', sellerName: 'Sarah', image: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48b?auto=format&fit=crop&w=600&q=80' }
-  ];
-
-  const wishlistedProducts = products.filter(p => favorites.includes(p.id));
   const uploadedHeartPath = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z";
 
   const primaryColor = '#1944F1';
@@ -199,16 +310,6 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
       action: () => setActiveModal('student_info')
     },
     {
-      id: 'purchases',
-      label: 'Sales & Order History',
-      sublabel: `${soldCount} items completed on campus`,
-      icon: PackageCheck,
-      bgColor: 'bg-[#20BF9B]/15 text-[#20BF9B]',
-      badge: `${soldCount} items`,
-      badgeColor: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-      action: () => setActiveModal('purchases')
-    },
-    {
       id: 'myads',
       label: 'My Active Listings',
       sublabel: 'Manage items currently for sale',
@@ -250,7 +351,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.99 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="w-full h-full bg-[#F4F6FB] text-slate-900 flex flex-col justify-between overflow-hidden font-sans select-none relative"
+      className="profile-screen w-full h-full bg-[#F4F6FB] text-slate-900 flex flex-col justify-between overflow-hidden font-sans select-none relative"
     >
       <div className="flex-1 overflow-y-auto pb-28 no-scrollbar">
         
@@ -296,7 +397,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
 
           <div className="text-center space-y-1">
             <h1 className="text-2xl font-bold text-white tracking-tight">
-              {user?.fullName || user?.name || "Student"}
+              {savedProfile.fullName || user?.fullName || user?.name || "Student"}
             </h1>
             <p className="text-xs text-blue-100/90 font-medium">
               {user?.universityName || "Campus Member"}
@@ -309,7 +410,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
           <div className="relative">
             <div className="w-24 h-24 rounded-full border-4 border-white bg-slate-100 overflow-hidden shadow-xl flex items-center justify-center select-none">
               <img 
-                src={avatarPreview || (user?.avatar && !['/avatar.svg', '/avatar-blue.svg'].includes(user.avatar) ? user.avatar : defaultAvatar)} 
+                src={savedProfile.avatar || (user?.avatar && !['/avatar.svg', '/avatar-blue.svg'].includes(user.avatar) ? user.avatar : defaultAvatar)} 
                 alt="Profile Avatar"
                 className="w-full h-full object-cover"
                 onError={(e) => { e.currentTarget.src = defaultAvatar; }}
@@ -333,15 +434,12 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
         <div className="px-5 mb-5">
           <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex items-center justify-around text-center">
             
-            <button 
-              onClick={() => setActiveModal('purchases')}
-              className="flex-1 space-y-0.5 hover:bg-slate-50 p-2 rounded-2xl transition-colors text-center"
-            >
+            <div className="flex-1 space-y-0.5 p-2 rounded-2xl text-center select-none">
               <div className="text-lg font-bold text-slate-900 font-sans">
                 {userAds ? userAds.filter(a => a.status === 'sold').length : 0}
               </div>
               <div className="text-[11px] font-medium text-slate-400">Items Sold</div>
-            </button>
+            </div>
 
             <div className="w-px h-8 bg-slate-100" />
 
@@ -433,6 +531,29 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
               <ChevronRight className="w-4.5 h-4.5 text-rose-300 group-hover:translate-x-0.5 transition-transform" />
             </button>
           )}
+
+          {/* Permanent Account Deletion Option */}
+          {user && (
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="w-full mt-2.5 bg-slate-50 hover:bg-rose-50/60 text-slate-500 hover:text-rose-600 rounded-2xl p-3 px-4 flex items-center justify-between border border-slate-100 hover:border-rose-100 transition-all active:scale-[0.99] group text-left"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-rose-100 group-hover:text-rose-600 text-slate-400 flex items-center justify-center shrink-0 transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-semibold block leading-tight">
+                    Delete Student Account
+                  </span>
+                  <span className="text-[10px] text-slate-400 group-hover:text-rose-400 block leading-tight mt-0.5">
+                    Permanently erase account & all listings
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          )}
         </div>
 
       </div>
@@ -495,7 +616,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                       <div className="relative">
                         <div className="w-20 h-20 rounded-full border-2 border-slate-200 bg-slate-100 overflow-hidden flex items-center justify-center shadow-sm">
                           <img 
-                            src={avatarPreview || (user?.avatar && !['/avatar.svg', '/avatar-blue.svg'].includes(user.avatar) ? user.avatar : defaultAvatar)} 
+                            src={draftAvatar || savedProfile.avatar || (user?.avatar && !['/avatar.svg', '/avatar-blue.svg'].includes(user.avatar) ? user.avatar : defaultAvatar)} 
                             alt="Avatar" 
                             className="w-full h-full object-cover" 
                             onError={(e) => { e.currentTarget.src = defaultAvatar; }}
@@ -516,7 +637,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                         <UserPen className="w-4 h-4 text-slate-400 absolute left-4 z-10 pointer-events-none" />
                         <input
                           type="text"
-                          value={user?.fullName || user?.name || editName || 'Student'}
+                          value={savedProfile.fullName || user?.fullName || user?.name || 'Student'}
                           readOnly
                           className="w-full pl-11 pr-10 py-3 bg-[#F3F4F6] text-slate-600 font-medium rounded-2xl text-xs border border-transparent cursor-not-allowed select-none focus:outline-none"
                         />
@@ -554,25 +675,50 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                       </div>
                     </div>
 
-                    {/* Editable: Date of Birth (DOB) */}
+                    {/* Editable: Date of Birth (DOB) with Calendar */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-bold text-slate-700">Date of Birth</label>
-                        {calculateAge(editDob) && (
+                        {calculateAge(draftDob) && (
                           <span className="text-[10px] text-[#1944F1] font-semibold bg-blue-50 px-2 py-0.5 rounded-md">
-                            {calculateAge(editDob)} years old
+                            {calculateAge(draftDob)} years old
                           </span>
                         )}
                       </div>
-                      <div className="relative">
-                        <Calendar className="w-4 h-4 text-slate-400 absolute left-4 top-3.5 z-10 pointer-events-none" />
-                        <input
-                          type="date"
-                          value={editDob}
-                          onChange={(e) => setEditDob(e.target.value)}
-                          className="w-full pl-11 pr-4 py-3 bg-[#F3F4F6] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all"
-                        />
-                      </div>
+                      
+                      {/* Trigger selector button */}
+                      <button
+                        type="button"
+                        onClick={() => setShowDobCalendar(!showDobCalendar)}
+                        className={`w-full px-4 py-3 bg-[#F3F4F6] hover:bg-[#EAECEF] text-slate-900 rounded-2xl text-xs font-normal text-left relative flex items-center justify-between transition-all ${
+                          showDobCalendar ? 'ring-2 ring-[#1944F1] bg-white shadow-2xs' : ''
+                        }`}
+                      >
+                        <span className={draftDob ? 'text-slate-900 font-medium' : 'text-slate-400'}>
+                          {formatDisplayDob(draftDob)}
+                        </span>
+                        <CalendarIcon className={`w-4 h-4 transition-colors shrink-0 ${showDobCalendar ? 'text-[#1944F1]' : 'text-slate-400'}`} />
+                      </button>
+
+                      {/* Calendar UI Component */}
+                      {showDobCalendar && (
+                        <div className="pt-1.5 animate-in fade-in duration-150">
+                          <Calendar
+                            mode="single"
+                            selected={draftDob ? new Date(draftDob) : undefined}
+                            onSelect={(selectedDate) => {
+                              if (selectedDate) {
+                                const year = selectedDate.getFullYear();
+                                const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                                const day = String(selectedDate.getDate()).padStart(2, '0');
+                                setDraftDob(`${year}-${month}-${day}`);
+                              }
+                            }}
+                            className="rounded-2xl border border-slate-200/90 shadow-sm"
+                            captionLayout="dropdown"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Editable: Course / Major */}
@@ -582,29 +728,58 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                         <GraduationCap className="w-4 h-4 text-slate-400 absolute left-4 top-3.5 z-10 pointer-events-none" />
                         <input
                           type="text"
-                          value={editCourse}
-                          onChange={(e) => setEditCourse(e.target.value)}
+                          value={draftCourse}
+                          onChange={(e) => setDraftCourse(e.target.value)}
                           placeholder="e.g. B.Tech Computer Science / B.Sc Physics"
                           className="w-full pl-11 pr-4 py-3 bg-[#F3F4F6] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all"
                         />
                       </div>
                     </div>
 
-                    {/* Editable: Academic Year */}
-                    <div className="space-y-1.5">
+                    {/* Editable: Academic Year with Custom App-Styled Dropdown */}
+                    <div className="space-y-1.5 relative" ref={yearDropdownRef}>
                       <label className="text-xs font-bold text-slate-700">Academic Year</label>
-                      <select
-                        value={editYear}
-                        onChange={(e) => setEditYear(e.target.value)}
-                        className="w-full px-4 py-3 bg-[#F3F4F6] text-slate-900 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all"
+                      
+                      {/* Trigger button */}
+                      <button
+                        type="button"
+                        onClick={() => setIsYearDropdownOpen(!isYearDropdownOpen)}
+                        className={`w-full px-4 py-3 bg-[#F3F4F6] hover:bg-[#EAECEF] text-slate-900 rounded-2xl text-xs font-normal text-left flex items-center justify-between transition-all ${
+                          isYearDropdownOpen ? 'ring-2 ring-[#1944F1] bg-white shadow-2xs' : ''
+                        }`}
                       >
-                        <option value="1st Year">1st Year (Freshman)</option>
-                        <option value="2nd Year">2nd Year (Sophomore)</option>
-                        <option value="3rd Year">3rd Year (Junior)</option>
-                        <option value="4th Year">4th Year (Senior)</option>
-                        <option value="Postgraduate / Master's">Postgraduate / Master's</option>
-                        <option value="Ph.D. Scholar">Ph.D. Scholar</option>
-                      </select>
+                        <span className="font-medium text-slate-900">
+                          {ACADEMIC_YEAR_OPTIONS.find(opt => opt.value === draftYear || opt.label === draftYear)?.label || draftYear || '1st Year (Freshman)'}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${isYearDropdownOpen ? 'rotate-180 text-[#1944F1]' : ''}`} />
+                      </button>
+
+                      {/* Dropdown Menu */}
+                      {isYearDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl shadow-xl border border-slate-100/90 p-1.5 py-2 z-30 animate-in fade-in zoom-in-95 duration-150">
+                          {ACADEMIC_YEAR_OPTIONS.map((opt) => {
+                            const isSelected = opt.value === draftYear || opt.label === draftYear;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  setDraftYear(opt.value);
+                                  setIsYearDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs flex items-center justify-between transition-colors my-0.5 select-none ${
+                                  isSelected
+                                    ? 'bg-[#1944F1] text-white font-bold shadow-xs'
+                                    : 'text-slate-700 hover:bg-blue-50 hover:text-[#1944F1] font-medium'
+                                }`}
+                              >
+                                <span>{opt.label}</span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-white shrink-0 ml-1.5" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     <button
@@ -755,41 +930,103 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                 )}
 
                 {/* 7. STUDENT REVIEWS */}
-                {activeModal === 'reviews' && (
-                  <div className="space-y-3 text-left">
-                    <div className="p-4 rounded-2xl bg-[#F5F3F3] border border-slate-100 flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-900">4.9 / 5.0 Rating</h4>
-                        <p className="text-[10px] text-slate-400">Based on 58 verified student transactions</p>
-                      </div>
-                      <div className="flex gap-1 text-amber-400">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="w-4 h-4 fill-amber-400" />
-                        ))}
-                      </div>
-                    </div>
+                {activeModal === 'reviews' && (() => {
+                  const myRatings = getSellerRatings(user?.id || user?._id || 'me');
+                  return (
+                    <div className="space-y-3 text-left">
+                      {myRatings.count > 0 ? (
+                        <>
+                          <div className="p-4 rounded-2xl bg-[#F5F3F3] border border-slate-100 flex items-center justify-between">
+                            <div>
+                              <h4 className="text-sm font-bold text-slate-900">{myRatings.average} / 5.0 Rating</h4>
+                              <p className="text-[10px] text-slate-400">Based on {myRatings.count} verified student {myRatings.count === 1 ? 'review' : 'reviews'}</p>
+                            </div>
+                            <div className="flex gap-1 text-amber-400">
+                              {[...Array(Math.round(myRatings.average))].map((_, i) => (
+                                <Star key={i} className="w-4 h-4 fill-amber-400" />
+                              ))}
+                            </div>
+                          </div>
 
-                    {[
-                      { name: 'Sarah Jenkins', rating: 5, comment: 'Super quick drop-off at Green Library! The TI-84 calculator was brand new.', date: '2d ago' },
-                      { name: 'Rahul K.', rating: 5, comment: 'Great seller! Book was in pristine condition as promised.', date: '1w ago' },
-                      { name: 'Maya Lin', rating: 4, comment: 'Fair price for the cycle, smooth communication.', date: '2w ago' }
-                    ].map((rev, idx) => (
-                      <div key={idx} className="p-3.5 rounded-2xl bg-white border border-slate-100 space-y-1.5 shadow-2xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-900">{rev.name}</span>
-                          <span className="text-[10px] text-slate-400">{rev.date}</span>
-                        </div>
-                        <div className="flex gap-0.5 text-amber-400">
-                          {[...Array(rev.rating)].map((_, i) => (
-                            <Star key={i} className="w-3 h-3 fill-amber-400" />
+                          {myRatings.reviews.map((rev, idx) => (
+                            <div key={rev.id || idx} className="p-3.5 rounded-2xl bg-white border border-slate-100 space-y-1.5 shadow-2xs">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-900">{rev.name}</span>
+                                <span className="text-[10px] text-slate-400">{rev.date}</span>
+                              </div>
+                              <div className="flex gap-0.5 text-amber-400">
+                                {[...Array(rev.rating)].map((_, i) => (
+                                  <Star key={i} className="w-3 h-3 fill-amber-400" />
+                                ))}
+                              </div>
+                              <p className="text-[11px] text-slate-600 leading-snug">{rev.comment}</p>
+                            </div>
                           ))}
+                        </>
+                      ) : (
+                        <div className="py-8 px-4 text-center rounded-2xl bg-[#F5F3F3] border border-slate-100 space-y-1.5">
+                          <div className="w-10 h-10 rounded-full bg-white text-slate-400 mx-auto flex items-center justify-center shadow-2xs">
+                            <Star className="w-5 h-5 text-slate-300" />
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-800">No Student Reviews Yet</h4>
+                          <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
+                            Once fellow campus students purchase your items and rate their experience, verified reviews will appear here.
+                          </p>
                         </div>
-                        <p className="text-[11px] text-slate-600 leading-snug">{rev.comment}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  );
+                })()}
 
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Permanent Account Deletion Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[120] flex items-center justify-center p-4"
+            onClick={() => !isDeletingAccount && setShowDeleteModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 space-y-4 text-left"
+            >
+              <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="text-center space-y-1">
+                <h3 className="text-base font-bold text-slate-900">Delete Account Permanently?</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  This action is irreversible. All your listings, active chats, student profile, and stored images will be permanently erased immediately.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeletingAccount}
+                  onClick={() => setShowDeleteModal(false)}
+                  className="flex-1 py-2.5 rounded-full border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingAccount}
+                  onClick={handleDeleteAccount}
+                  className="flex-1 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {isDeletingAccount ? 'Deleting...' : 'Delete My Account'}
+                </button>
               </div>
             </motion.div>
           </motion.div>
