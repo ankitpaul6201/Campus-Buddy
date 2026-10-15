@@ -211,7 +211,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
     // 4. Condition filter
     if (selectedCondition !== 'all') {
       const cond = (item.condition || '').toUpperCase().replace(/\s+/g, '_');
-      if (selectedCondition === 'new' && !cond.includes('NEW')) return false;
+      if (selectedCondition === 'new' && (cond.includes('LIKE') || !cond.includes('NEW'))) return false;
       if (selectedCondition === 'like_new' && !cond.includes('LIKE')) return false;
       if (selectedCondition === 'good' && !cond.includes('GOOD')) return false;
       if (selectedCondition === 'fair' && !cond.includes('FAIR')) return false;
@@ -718,10 +718,10 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                   {/* Quick price chips */}
                   <div className="grid grid-cols-2 gap-2 mb-2">
                     {[
-                      { label: 'Under ₹500', min: '', max: '500' },
-                      { label: '₹500 - ₹1,000', min: '500', max: '1000' },
-                      { label: '₹1,000 - ₹2,500', min: '1000', max: '2500' },
-                      { label: '₹2,500+', min: '2500', max: '' },
+                      { label: 'Under ₹1,000', min: '', max: '1000' },
+                      { label: '₹1,000 - ₹5,000', min: '1000', max: '5000' },
+                      { label: '₹5,000 - ₹25,000', min: '5000', max: '25000' },
+                      { label: '₹25,000 - ₹2,00,000', min: '25000', max: '200000' },
                     ].map((preset, idx) => {
                       const isPreset = minPrice === preset.min && maxPrice === preset.max;
                       return (
@@ -754,9 +754,19 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                       <span className="absolute left-3.5 top-3 text-xs font-light text-slate-400">₹</span>
                       <input
                         type="number"
+                        min="0"
+                        max="200000"
                         placeholder="Min price (₹)"
                         value={minPrice}
-                        onChange={(e) => setMinPrice(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '') {
+                            setMinPrice('');
+                          } else {
+                            const num = Math.max(0, Math.min(200000, Number(val)));
+                            setMinPrice(String(num));
+                          }
+                        }}
                         className="w-full pl-7 pr-3 py-2.5 bg-[#F8FAFC] border border-slate-200 rounded-2xl text-xs font-light text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#1944F1]"
                       />
                     </div>
@@ -764,12 +774,26 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                       <span className="absolute left-3.5 top-3 text-xs font-light text-slate-400">₹</span>
                       <input
                         type="number"
-                        placeholder="Max price (₹)"
+                        min="0"
+                        max="200000"
+                        placeholder="Max (up to ₹2,00,000)"
                         value={maxPrice}
-                        onChange={(e) => setMaxPrice(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '') {
+                            setMaxPrice('');
+                          } else {
+                            const num = Math.max(0, Math.min(200000, Number(val)));
+                            setMaxPrice(String(num));
+                          }
+                        }}
                         className="w-full pl-7 pr-3 py-2.5 bg-[#F8FAFC] border border-slate-200 rounded-2xl text-xs font-light text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#1944F1]"
                       />
                     </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-light mt-1.5 px-0.5">
+                    <span>Min: ₹0</span>
+                    <span>Max limit: ₹2,00,000</span>
                   </div>
                 </div>
 
@@ -806,10 +830,10 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                   <div className="flex flex-wrap gap-2">
                     {[
                       { id: 'all', label: 'All Conditions' },
+                      { id: 'new', label: 'New' },
                       { id: 'like_new', label: 'Like New' },
                       { id: 'good', label: 'Good' },
                       { id: 'fair', label: 'Fair' },
-                      { id: 'new', label: 'Brand New' },
                     ].map(cond => {
                       const isSel = selectedCondition === cond.id;
                       return (
