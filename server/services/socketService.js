@@ -2,6 +2,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 
 let io = null;
+const onlineUsers = new Map(); // userId -> Set of socketIds
 
 /**
  * Initialize Socket.io on the HTTP server
@@ -67,6 +68,26 @@ function initSocket(httpServer) {
     socket.join(userRoom);
     console.log(`🔌 [Socket.io] User connected: ${userId} (${socket.user.fullName || socket.user.email}) -> Room: ${userRoom}`);
 
+    // Track active presence
+    let userSockets = onlineUsers.get(userId);
+    const isFirstConnection = !userSockets || userSockets.size === 0;
+    if (!userSockets) {
+      userSockets = new Set();
+      onlineUsers.set(userId, userSockets);
+    }
+    userSockets.add(socket.id);
+
+    if (isFirstConnection) {
+      io.emit('presence:update', { userId, status: 'online' });
+    }
+
+    // Immediately push currently online user list to the connected client
+    socket.emit('presence:init', Array.from(onlineUsers.keys()));
+
+    socket.on('presence:request', () => {
+      socket.emit('presence:init', Array.from(onlineUsers.keys()));
+    });
+
     // Join conversation room for active real-time chatting
     socket.on('conversation:join', (conversationId) => {
       if (conversationId) {
@@ -130,6 +151,14 @@ function initSocket(httpServer) {
 
     socket.on('disconnect', (reason) => {
       console.log(`🔌 [Socket.io] User disconnected: ${userId} (Reason: ${reason})`);
+      const userSockets = onlineUsers.get(userId);
+      if (userSockets) {
+        userSockets.delete(socket.id);
+        if (userSockets.size === 0) {
+          onlineUsers.delete(userId);
+          io.emit('presence:update', { userId, status: 'offline' });
+        }
+      }
     });
   });
 

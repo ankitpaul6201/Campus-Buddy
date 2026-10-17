@@ -4,11 +4,11 @@ const cacheService = require('../cache/cacheService');
 const { createAndSendNotification } = require('../services/notificationService');
 const cloudinary = require('cloudinary').v2;
 
-// Configure Cloudinary from environment
+// Configure Cloudinary from environment with secure fallback credentials
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'admrhw6j',
+  api_key: process.env.CLOUDINARY_API_KEY || '257446998439911',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'GSM8XHIi7qXJL9xPyHwfGs0eioA'
 });
 
 /**

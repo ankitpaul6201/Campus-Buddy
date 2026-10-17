@@ -20,6 +20,7 @@ import {
 import { 
   subscribeToChatMessages, 
   subscribeToMessagesRead,
+  subscribeToPresence,
   joinConversationRoom, 
   leaveConversationRoom,
   markConversationRead 
@@ -42,6 +43,27 @@ export default function ChatScreen({
   const [chatsList, setChatsList] = useState([]);
   const [loadingChats, setLoadingChats] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [onlineUserIds, setOnlineUserIds] = useState(new Set());
+
+  // Real-time online presence listener
+  useEffect(() => {
+    const unsub = subscribeToPresence((event) => {
+      if (event.type === 'init') {
+        setOnlineUserIds(new Set((event.onlineIds || []).map(String)));
+      } else if (event.type === 'update') {
+        setOnlineUserIds(prev => {
+          const next = new Set(prev);
+          if (event.status === 'online') {
+            next.add(String(event.userId));
+          } else {
+            next.delete(String(event.userId));
+          }
+          return next;
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const uploadedHeartPath = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z";
 
@@ -52,6 +74,8 @@ export default function ChatScreen({
     const otherParticipant = (conv.participants || []).find(
       p => String(p?._id || p?.id || p) !== String(currentUserId)
     ) || (conv.participants && conv.participants[0]) || {};
+
+    const otherUserId = String(otherParticipant?._id || otherParticipant?.id || (typeof otherParticipant === 'string' ? otherParticipant : ''));
 
     const name = otherParticipant.fullName || otherParticipant.name || conv.name || 'Campus Student';
     const avatar = otherParticipant.avatar || (name ? name.charAt(0).toUpperCase() : 'S');
@@ -71,6 +95,7 @@ export default function ChatScreen({
       avatar,
       verified: otherParticipant.isVerified || false,
       productTitle,
+      otherUserId,
       lastMessage: conv.lastMessage || 'Conversation started',
       time: timeStr,
       unreadCount: conv.unreadCount || 0,
@@ -353,9 +378,20 @@ export default function ChatScreen({
                         <ShieldCheck className="w-3 h-3 text-[#1944F1]" />
                       )}
                     </h3>
-                    <p className="text-[10px] text-[#1944F1] font-semibold leading-tight">
-                      {activeChat.productTitle || 'Campus Marketplace'}
-                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5 leading-tight">
+                      {activeChat.otherUserId && onlineUserIds.has(String(activeChat.otherUserId)) ? (
+                        <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-semibold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Online
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-normal">Offline</span>
+                      )}
+                      <span className="text-[8px] text-slate-300">•</span>
+                      <p className="text-[10px] text-[#1944F1] font-semibold leading-tight truncate max-w-[150px]">
+                        {activeChat.productTitle || 'Campus Marketplace'}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -568,7 +604,9 @@ export default function ChatScreen({
                               {chat.avatar || 'S'}
                             </div>
                           )}
-                          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                          {Boolean(chat.otherUserId && onlineUserIds.has(String(chat.otherUserId))) && (
+                            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                          )}
                         </div>
 
                         <div className="min-w-0">

@@ -164,3 +164,24 @@ export function subscribeToMessagesRead(handler) {
     if (socket) socket.off('chat:messages_read', handler);
   };
 }
+
+/**
+ * Listen for real-time online presence (green dot)
+ */
+export function subscribeToPresence(handler) {
+  if (!socket) return () => {};
+  const onInit = (onlineIds) => handler({ type: 'init', onlineIds });
+  const onUpdate = ({ userId, status }) => handler({ type: 'update', userId, status });
+  socket.on('presence:init', onInit);
+  socket.on('presence:update', onUpdate);
+
+  // Request fresh list immediately
+  socket.emit('presence:request');
+
+  return () => {
+    if (socket) {
+      socket.off('presence:init', onInit);
+      socket.off('presence:update', onUpdate);
+    }
+  };
+}

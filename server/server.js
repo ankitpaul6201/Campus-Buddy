@@ -64,9 +64,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'x-correlation-id', 'x-cache-bypass', 'cache-control']
 }));
 
-// 4. Body Parser with reasonable limits
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// 4. Body Parser with generous limits to support mobile photo uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // 5. General API Rate Limiting
 app.use('/api', apiLimiter);

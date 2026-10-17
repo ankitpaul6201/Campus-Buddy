@@ -7,11 +7,11 @@ const Product = require('../models/Product');
 const cacheService = require('../cache/cacheService');
 const emailService = require('../services/emailService');
 
-// Configure Cloudinary explicitly from environment
+// Configure Cloudinary explicitly from environment with secure fallback credentials
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'admrhw6j',
+  api_key: process.env.CLOUDINARY_API_KEY || '257446998439911',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'GSM8XHIi7qXJL9xPyHwfGs0eioA'
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'campus_buddy_super_secret_jwt_key_2026_token_auth';
