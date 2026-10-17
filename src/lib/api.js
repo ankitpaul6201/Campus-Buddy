@@ -591,6 +591,43 @@ export function getUserAdsStorageKey(user = getStoredUser()) {
   return uid ? `campus_user_ads_${uid}` : null;
 }
 
+// Helper to get user-specific favorites storage key
+export function getUserFavoritesStorageKey(user = getStoredUser()) {
+  const uid = user?._id || user?.id;
+  return uid ? `campus_favorites_${uid}` : null;
+}
+
+// Read favorites strictly for the active user
+export function getStoredFavorites(user = getStoredUser()) {
+  try {
+    const key = getUserFavoritesStorageKey(user);
+    if (!key) return [];
+    const saved = localStorage.getItem(key);
+    if (!saved) return [];
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed)) return [];
+
+    // Filter out invalid or corrupted IDs
+    return parsed.filter(id => {
+      if (!id) return false;
+      const str = String(id).trim();
+      return str !== '' && str !== 'null' && str !== 'undefined' && str !== 'card-1' && str !== 'card-2' && str !== '1';
+    });
+  } catch {
+    return [];
+  }
+}
+
+// Persist favorites strictly for the active user
+export function saveStoredFavorites(favorites, user = getStoredUser()) {
+  try {
+    const key = getUserFavoritesStorageKey(user);
+    if (key) {
+      localStorage.setItem(key, JSON.stringify(Array.isArray(favorites) ? favorites : []));
+    }
+  } catch {}
+}
+
 // Strict check: verify an ad actually belongs to the specified user
 export function isAdOwnedByUser(ad, user = getStoredUser()) {
   if (!ad || !user) return false;
@@ -766,60 +803,76 @@ export async function fetchConversations() {
   }
 }
 
+const inFlightConversations = new Map();
+
 // Start or get an existing conversation for a product
 export async function startConversation({ sellerId, productId, initialMessage }) {
-  const token = getAuthToken();
-  let conversation = null;
-  try {
-    if (token) {
-      const res = await fetch(`${API_BASE_URL}/chat/conversations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ sellerId, productId, initialMessage })
-      });
-      if (res.ok) {
-        conversation = await res.json();
-      }
-    }
-  } catch (err) {
-    console.warn('Backend start conversation offline, creating local:', err);
+  const reqKey = `${sellerId}_${productId || 'none'}`;
+  if (inFlightConversations.has(reqKey)) {
+    return inFlightConversations.get(reqKey);
   }
 
-  if (!conversation) {
-    const currentUser = getStoredUser();
-    const convId = 'conv_' + (productId || 'p') + '_' + (sellerId || 's');
-    conversation = {
-      _id: convId,
-      id: convId,
-      participants: [
-        { _id: currentUser?.id || currentUser?._id || 'me', fullName: currentUser?.fullName || 'Me' },
-        { _id: sellerId, fullName: 'Seller' }
-      ],
-      product: { _id: productId },
-      lastMessage: initialMessage || 'Conversation started',
-      lastMessageAt: new Date().toISOString(),
-      messages: initialMessage ? [
-        {
-          _id: 'msg_' + Date.now(),
-          sender: currentUser?.id || currentUser?._id || 'me',
-          text: initialMessage,
-          createdAt: new Date().toISOString(),
-          read: true
+  const promise = (async () => {
+    const token = getAuthToken();
+    let conversation = null;
+    try {
+      if (token) {
+        const res = await fetch(`${API_BASE_URL}/chat/conversations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ sellerId, productId, initialMessage })
+        });
+        if (res.ok) {
+          conversation = await res.json();
         }
-      ] : []
-    };
-  }
+      }
+    } catch (err) {
+      console.warn('Backend start conversation offline, creating local:', err);
+    }
 
+    if (!conversation) {
+      const currentUser = getStoredUser();
+      const convId = 'conv_' + (productId || 'p') + '_' + (sellerId || 's');
+      conversation = {
+        _id: convId,
+        id: convId,
+        participants: [
+          { _id: currentUser?.id || currentUser?._id || 'me', fullName: currentUser?.fullName || 'Me' },
+          { _id: sellerId, fullName: 'Seller' }
+        ],
+        product: { _id: productId },
+        lastMessage: initialMessage || 'Conversation started',
+        lastMessageAt: new Date().toISOString(),
+        messages: initialMessage ? [
+          {
+            _id: 'msg_' + Date.now(),
+            sender: currentUser?.id || currentUser?._id || 'me',
+            text: initialMessage,
+            createdAt: new Date().toISOString(),
+            read: true
+          }
+        ] : []
+      };
+    }
+
+    try {
+      const convs = JSON.parse(localStorage.getItem('campus_conversations_cache') || '[]');
+      const updated = [conversation, ...convs.filter(c => (c._id || c.id) !== (conversation._id || conversation.id))];
+      localStorage.setItem('campus_conversations_cache', JSON.stringify(updated));
+    } catch {}
+
+    return conversation;
+  })();
+
+  inFlightConversations.set(reqKey, promise);
   try {
-    const convs = JSON.parse(localStorage.getItem('campus_conversations_cache') || '[]');
-    const updated = [conversation, ...convs.filter(c => (c._id || c.id) !== (conversation._id || conversation.id))];
-    localStorage.setItem('campus_conversations_cache', JSON.stringify(updated));
-  } catch {}
-
-  return conversation;
+    return await promise;
+  } finally {
+    setTimeout(() => inFlightConversations.delete(reqKey), 1500);
+  }
 }
 
 // Fetch messages for a conversation
@@ -929,7 +982,7 @@ export function initAnalyticsCleanup() {
       localStorage.removeItem('campus_ad_views_v2');
 
       // Reseed campus_ad_likes strictly based on actual current favorites
-      const favs = JSON.parse(localStorage.getItem('campus_favorites') || '[]');
+      const favs = getStoredFavorites();
       const likesMap = {};
       if (Array.isArray(favs)) {
         favs.forEach(id => {

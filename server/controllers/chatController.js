@@ -14,13 +14,31 @@ async function getConversations(req, res, next) {
     const conversations = await Conversation.find({
       participants: userId
     })
-      .select('participants product lastMessage lastMessageAt updatedAt')
+      .select('participants product lastMessage lastMessageAt updatedAt messages')
       .populate('participants', 'fullName avatar universityName isVerified email')
       .populate('product', 'title price images condition campusName status')
       .sort({ lastMessageAt: -1 })
       .lean();
 
-    res.json(conversations);
+    // Deduplicate conversations for the same peer and product
+    const seen = new Set();
+    const unique = [];
+    for (const c of conversations) {
+      const otherParticipant = (c.participants || []).find(
+        p => String(p._id || p.id || p) !== String(userId)
+      ) || {};
+      const otherId = String(otherParticipant._id || otherParticipant.id || otherParticipant || '');
+      const prodId = String(c.product?._id || c.product || '');
+      const dedupeKey = `${otherId}_${prodId}`;
+
+      if (otherId && seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+      unique.push(c);
+    }
+
+    res.json(unique);
   } catch (err) {
     next(err);
   }
@@ -43,7 +61,7 @@ async function startConversation(req, res, next) {
       return res.status(400).json({ error: 'You cannot start a conversation with yourself' });
     }
 
-    // Check if conversation already exists
+    // Check if conversation already exists (sort by latest active)
     const query = {
       participants: { $all: [userId, sellerId] }
     };
@@ -52,6 +70,7 @@ async function startConversation(req, res, next) {
     }
 
     let conversation = await Conversation.findOne(query)
+      .sort({ lastMessageAt: -1 })
       .populate('participants', 'fullName avatar universityName isVerified email')
       .populate('product', 'title price images condition campusName status');
 
@@ -68,20 +87,30 @@ async function startConversation(req, res, next) {
         });
       }
 
-      conversation = new Conversation({
-        participants: [userId, sellerId],
-        product: productId || null,
-        lastMessage: initialMessage ? initialMessage.trim() : 'Conversation started',
-        lastMessageAt: new Date(),
-        messages
-      });
+      try {
+        const newConv = new Conversation({
+          participants: [userId, sellerId],
+          product: productId || null,
+          lastMessage: initialMessage ? initialMessage.trim() : 'Conversation started',
+          lastMessageAt: new Date(),
+          messages
+        });
 
-      await conversation.save();
+        await newConv.save();
 
-      conversation = await Conversation.findById(conversation._id)
-        .populate('participants', 'fullName avatar universityName isVerified email')
-        .populate('product', 'title price images condition campusName status')
-        .lean();
+        conversation = await Conversation.findById(newConv._id)
+          .populate('participants', 'fullName avatar universityName isVerified email')
+          .populate('product', 'title price images condition campusName status')
+          .lean();
+      } catch (saveErr) {
+        // Handle concurrent insert collision gracefully
+        conversation = await Conversation.findOne(query)
+          .sort({ lastMessageAt: -1 })
+          .populate('participants', 'fullName avatar universityName isVerified email')
+          .populate('product', 'title price images condition campusName status')
+          .lean();
+        if (!conversation) throw saveErr;
+      }
     }
 
     // If there is an initial message or newly started chat, notify seller

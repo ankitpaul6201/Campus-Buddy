@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
-import { apiGetMe, apiLogout, getStoredUser, getAuthToken, fetchMyAds, fetchNotifications, resolveAllUserAds, API_BASE_URL } from './lib/api';
+import { apiGetMe, apiLogout, getStoredUser, getAuthToken, fetchMyAds, fetchNotifications, resolveAllUserAds, getStoredFavorites, saveStoredFavorites, API_BASE_URL } from './lib/api';
 import { initSocketClient, disconnectSocket, subscribeToNewNotifications, subscribeToUnreadCount } from './lib/socket';
 import SplashScreen from './components/SplashScreen';
 import WelcomeScreen from './components/WelcomeScreen';
@@ -31,46 +31,26 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [favorites, setFavorites] = useState(() => {
-    try {
-      const saved = localStorage.getItem('campus_favorites');
-      if (!saved) return [];
-      const parsed = JSON.parse(saved);
-      if (!Array.isArray(parsed)) return [];
-
-      // Collect known product IDs from local caches if present
-      let knownIds = null;
-      try {
-        const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
-        const userCached = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
-        if (cached.length > 0 || userCached.length > 0) {
-          knownIds = new Set([
-            ...cached.map(p => String(p._id || p.id)),
-            ...userCached.map(p => String(p._id || p.id))
-          ]);
-        }
-      } catch {}
-
-      return parsed.filter(id => {
-        if (!id) return false;
-        const str = String(id).trim();
-        if (str === '' || str === 'null' || str === 'undefined' || str === 'card-1' || str === 'card-2' || str === '1') {
-          return false;
-        }
-        if (knownIds && knownIds.size > 0) {
-          return knownIds.has(str);
-        }
-        return true;
-      });
-    } catch {
-      return [];
-    }
+    return getStoredFavorites(getStoredUser());
   });
 
+  // When currentUser changes (login, logout, account switch), re-scope favorites strictly to that user
   useEffect(() => {
-    try {
-      localStorage.setItem('campus_favorites', JSON.stringify(favorites));
-    } catch {}
-  }, [favorites]);
+    const user = currentUser || getStoredUser();
+    if (user && (user._id || user.id)) {
+      setFavorites(getStoredFavorites(user));
+    } else {
+      setFavorites([]);
+    }
+  }, [currentUser?._id, currentUser?.id]);
+
+  // Persist favorites strictly under the active user's key
+  useEffect(() => {
+    const user = currentUser || getStoredUser();
+    if (user && (user._id || user.id)) {
+      saveStoredFavorites(favorites, user);
+    }
+  }, [favorites, currentUser?._id, currentUser?.id]);
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef = useRef(0);
 
@@ -295,12 +275,17 @@ export default function App() {
     setCurrentUser(null);
     setUserAds([]);
     setNotifications([]);
+    setFavorites([]);
+    try {
+      localStorage.removeItem('campus_favorites');
+    } catch {}
     setCurrentScreen('welcome');
   };
 
   const handleLoginSuccess = (user) => {
-    // Clear product cache on account switch so products from previous college never bleed through
+    // Clear legacy product/ad caches on account switch so products from previous college never bleed through
     try {
+      localStorage.removeItem('campus_favorites');
       localStorage.removeItem('campus_products_cache');
       localStorage.removeItem('campus_user_ads');
       Object.keys(localStorage).forEach(key => {
@@ -309,6 +294,7 @@ export default function App() {
     } catch {}
     setCurrentUser(user);
     setUserAds([]); // Clear previous user's ads immediately
+    setFavorites(getStoredFavorites(user)); // Load strictly this user's wishlist
     setCurrentScreen('main');
     initSocketClient(getAuthToken());
     fetchNotifications().then(res => {

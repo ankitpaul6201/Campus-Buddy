@@ -76,6 +76,8 @@ export default function ChatScreen({
     };
   };
 
+  const targetInFlightRef = React.useRef(null);
+
   // Load conversations on mount
   useEffect(() => {
     let isMounted = true;
@@ -84,7 +86,20 @@ export default function ChatScreen({
         setLoadingChats(true);
         const res = await fetchConversations();
         if (isMounted && Array.isArray(res)) {
-          setChatsList(res.map(formatConversation));
+          // Deduplicate by participants + product
+          const seen = new Set();
+          const unique = [];
+          for (const raw of res) {
+            const formatted = formatConversation(raw);
+            const otherP = (raw.participants || []).find(p => String(p._id || p.id || p) !== String(currentUserId)) || {};
+            const otherId = String(otherP._id || otherP.id || otherP);
+            const prodId = String(raw.product?._id || raw.product || raw.productId || '');
+            const dedupeKey = `${otherId}_${prodId}`;
+            if (otherId && seen.has(dedupeKey)) continue;
+            seen.add(dedupeKey);
+            unique.push(formatted);
+          }
+          setChatsList(unique);
         }
       } catch (err) {
         console.warn('Error loading conversations:', err);
@@ -96,16 +111,25 @@ export default function ChatScreen({
     return () => { isMounted = false; };
   }, [user]);
 
-  // Handle activeChatTarget passed from HomeScreen
+  // Handle activeChatTarget passed from HomeScreen / ProductDetailsScreen
   useEffect(() => {
     if (!activeChatTarget) return;
+
+    const targetKey = `${activeChatTarget.sellerId}_${activeChatTarget.productId || 'none'}`;
+    if (targetInFlightRef.current === targetKey) {
+      return;
+    }
+    targetInFlightRef.current = targetKey;
+
+    const currentTarget = activeChatTarget;
+    if (setActiveChatTarget) setActiveChatTarget(null);
 
     let isMounted = true;
     async function initTargetChat() {
       try {
         const conv = await startConversation({
-          sellerId: activeChatTarget.sellerId,
-          productId: activeChatTarget.productId,
+          sellerId: currentTarget.sellerId,
+          productId: currentTarget.productId,
           initialMessage: ''
         });
 
@@ -114,14 +138,14 @@ export default function ChatScreen({
         const targetId = conv._id || conv.id;
         const formatted = formatConversation(conv);
 
-        if (activeChatTarget.sellerName) formatted.name = activeChatTarget.sellerName;
-        if (activeChatTarget.productTitle) formatted.productTitle = activeChatTarget.productTitle;
-        if (activeChatTarget.avatar) formatted.avatar = activeChatTarget.avatar;
+        if (currentTarget.sellerName) formatted.name = currentTarget.sellerName;
+        if (currentTarget.productTitle) formatted.productTitle = currentTarget.productTitle;
+        if (currentTarget.avatar) formatted.avatar = currentTarget.avatar;
 
         setChatsList(prev => {
-          const exists = prev.some(c => c.id === targetId);
+          const exists = prev.some(c => String(c.id) === String(targetId));
           if (exists) {
-            return prev.map(c => c.id === targetId ? { ...c, ...formatted } : c);
+            return prev.map(c => String(c.id) === String(targetId) ? { ...c, ...formatted } : c);
           }
           return [formatted, ...prev];
         });
@@ -143,7 +167,11 @@ export default function ChatScreen({
       } catch (err) {
         console.error('Failed to init target chat:', err);
       } finally {
-        if (setActiveChatTarget) setActiveChatTarget(null);
+        setTimeout(() => {
+          if (targetInFlightRef.current === targetKey) {
+            targetInFlightRef.current = null;
+          }
+        }, 1500);
       }
     }
 

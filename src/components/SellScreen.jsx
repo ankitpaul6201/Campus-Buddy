@@ -597,7 +597,7 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
             {/* Contact Phone Number Field */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-800 font-sans block">
-                Contact Phone Number
+                Contact Number
               </label>
               <div className="relative">
                 <Phone className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
