@@ -180,13 +180,35 @@ async function createProduct(req, res, next) {
       User.findByIdAndUpdate(userId, { phone: cleanPhone }).catch(e => console.warn('User phone sync error:', e));
     }
 
+    // Upload base64 product photos to Cloudinary in campus_buddy_products folder
+    const processedImages = [];
+    for (const img of (images || []).slice(0, 5)) {
+      if (typeof img === 'string' && img.startsWith('data:image')) {
+        try {
+          const uploadRes = await cloudinary.uploader.upload(img, {
+            folder: 'campus_buddy_products',
+            resource_type: 'image',
+            transformation: [
+              { width: 1200, height: 1200, crop: 'limit', quality: 'auto', fetch_format: 'auto' }
+            ]
+          });
+          processedImages.push(uploadRes.secure_url);
+        } catch (cloudErr) {
+          console.error('[productController] Cloudinary image upload failed:', cloudErr.message);
+          processedImages.push(img);
+        }
+      } else if (typeof img === 'string' && img.trim()) {
+        processedImages.push(img.trim());
+      }
+    }
+
     const product = new Product({
       title: title.trim(),
       description: description.trim(),
       price: numericPrice,
       category: (category && category.trim()) || 'Other',
       condition: condition || 'Like New',
-      images: images.slice(0, 5),
+      images: processedImages,
       seller: userId,
       campusName: resolvedCampus,
       universityName: resolvedCampus,
