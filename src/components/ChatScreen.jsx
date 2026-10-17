@@ -46,8 +46,9 @@ export default function ChatScreen({
   const currentUserId = user?.id || user?._id || getStoredUser()?.id;
 
   const formatConversation = (conv) => {
+    if (!conv) return {};
     const otherParticipant = (conv.participants || []).find(
-      p => String(p._id || p.id) !== String(currentUserId)
+      p => String(p?._id || p?.id || p) !== String(currentUserId)
     ) || (conv.participants && conv.participants[0]) || {};
 
     const name = otherParticipant.fullName || otherParticipant.name || conv.name || 'Campus Student';
@@ -90,13 +91,14 @@ export default function ChatScreen({
           const seen = new Set();
           const unique = [];
           for (const raw of res) {
+            if (!raw) continue;
             const formatted = formatConversation(raw);
-            const otherP = (raw.participants || []).find(p => String(p._id || p.id || p) !== String(currentUserId)) || {};
-            const otherId = String(otherP._id || otherP.id || otherP);
+            const otherP = (raw.participants || []).find(p => String(p?._id || p?.id || p) !== String(currentUserId));
+            const otherId = otherP ? String(otherP._id || otherP.id || (typeof otherP === 'string' ? otherP : '')) : '';
             const prodId = String(raw.product?._id || raw.product || raw.productId || '');
             const dedupeKey = `${otherId}_${prodId}`;
             if (otherId && seen.has(dedupeKey)) continue;
-            seen.add(dedupeKey);
+            if (otherId) seen.add(dedupeKey);
             unique.push(formatted);
           }
           setChatsList(unique);

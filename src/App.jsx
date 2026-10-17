@@ -30,6 +30,11 @@ export default function App() {
   const [previousNav, setPreviousNav] = useState('home');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedSeller, setSelectedSeller] = useState(null);
+
+  // Traditional JWT Auth state (MongoDB Atlas)
+  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+  const [authLoading, setAuthLoading] = useState(true);
+
   const [favorites, setFavorites] = useState(() => {
     return getStoredFavorites(getStoredUser());
   });
@@ -53,10 +58,6 @@ export default function App() {
   }, [favorites, currentUser?._id, currentUser?.id]);
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef = useRef(0);
-
-  // Traditional JWT Auth state (MongoDB Atlas)
-  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
-  const [authLoading, setAuthLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [activeNotificationToast, setActiveNotificationToast] = useState(null);
   const [userAds, setUserAds] = useState(() => {
