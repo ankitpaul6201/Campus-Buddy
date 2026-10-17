@@ -35,6 +35,13 @@ async function getConversations(req, res, next) {
         continue;
       }
       seen.add(dedupeKey);
+
+      // Compute unread message count sent by the other participant
+      const unreadCount = (c.messages || []).filter(
+        m => String(m.sender?._id || m.sender) !== String(userId) && !m.read
+      ).length;
+      c.unreadCount = unreadCount;
+
       unique.push(c);
     }
 

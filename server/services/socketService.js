@@ -129,6 +129,10 @@ function initSocket(httpServer) {
                 conversationId,
                 readBy: userId
               });
+              emitToUser(userId, 'chat:messages_read', {
+                conversationId,
+                readBy: userId
+              });
             }
           }
         } catch (err) {

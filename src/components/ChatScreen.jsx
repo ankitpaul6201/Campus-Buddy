@@ -34,6 +34,7 @@ export default function ChatScreen({
   notifications = [], 
   activeChatTarget, 
   setActiveChatTarget, 
+  onRefreshUnreadChats,
   onNavigateBack 
 }) {
   const [selectedChatId, setSelectedChatId] = useState(null);
@@ -129,6 +130,7 @@ export default function ChatScreen({
             unique.push(formatted);
           }
           setChatsList(unique);
+          if (onRefreshUnreadChats) onRefreshUnreadChats();
         }
       } catch (err) {
         console.warn('Error loading conversations:', err);
@@ -181,6 +183,8 @@ export default function ChatScreen({
 
         setSelectedChatId(targetId);
         markConversationRead(targetId);
+        setChatsList(prev => prev.map(c => String(c.id) === String(targetId) ? { ...c, unreadCount: 0 } : c));
+        if (onRefreshUnreadChats) onRefreshUnreadChats();
 
         // Load messages
         const msgs = await fetchMessages(targetId);
@@ -214,6 +218,8 @@ export default function ChatScreen({
   const handleSelectChat = async (chatId) => {
     setSelectedChatId(chatId);
     markConversationRead(chatId);
+    setChatsList(prev => prev.map(c => String(c.id) === String(chatId) ? { ...c, unreadCount: 0 } : c));
+    if (onRefreshUnreadChats) onRefreshUnreadChats();
     try {
       setLoadingMessages(true);
       const msgs = await fetchMessages(chatId);
@@ -243,6 +249,8 @@ export default function ChatScreen({
 
     joinConversationRoom(selectedChatId);
     markConversationRead(selectedChatId);
+    setChatsList(prev => prev.map(c => String(c.id) === String(selectedChatId) ? { ...c, unreadCount: 0 } : c));
+    if (onRefreshUnreadChats) onRefreshUnreadChats();
 
     const unsubMsg = subscribeToChatMessages(({ conversationId, message }) => {
       if (String(conversationId) === String(selectedChatId) && message) {
@@ -251,6 +259,8 @@ export default function ChatScreen({
 
         if (!isMine) {
           markConversationRead(selectedChatId);
+          setChatsList(prev => prev.map(c => String(c.id) === String(selectedChatId) ? { ...c, unreadCount: 0 } : c));
+          if (onRefreshUnreadChats) onRefreshUnreadChats();
           setMessages(prev => {
             const exists = prev.some(m => String(m.id) === String(message._id || message.id));
             if (exists) return prev;
@@ -439,9 +449,11 @@ export default function ChatScreen({
                   className="w-10 h-10 min-w-[40px] max-w-[40px] min-h-[40px] max-h-[40px] rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-900 relative shrink-0"
                 >
                   <img src="/bell-svgrepo-com.svg" alt="Bell" className="w-5 h-5 filter brightness-0 opacity-80" />
-                  {notifications.filter(n => n.unread).length > 0 && (
+                  {notifications.filter(n => n.read === false || (n.unread === true && n.read !== true)).length > 0 && (
                     <span className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] min-h-[18px] max-w-[18px] max-h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs">
-                      {notifications.filter(n => n.unread).length}
+                      {notifications.filter(n => n.read === false || (n.unread === true && n.read !== true)).length > 9 
+                        ? '9+' 
+                        : notifications.filter(n => n.read === false || (n.unread === true && n.read !== true)).length}
                     </span>
                   )}
                 </button>

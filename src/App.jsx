@@ -3,8 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
-import { apiGetMe, apiLogout, getStoredUser, getAuthToken, fetchMyAds, fetchNotifications, resolveAllUserAds, getStoredFavorites, saveStoredFavorites, API_BASE_URL } from './lib/api';
-import { initSocketClient, disconnectSocket, subscribeToNewNotifications, subscribeToUnreadCount } from './lib/socket';
+import { apiGetMe, apiLogout, getStoredUser, getAuthToken, fetchMyAds, fetchNotifications, fetchConversations, resolveAllUserAds, getStoredFavorites, saveStoredFavorites, API_BASE_URL } from './lib/api';
+import { initSocketClient, disconnectSocket, subscribeToNewNotifications, subscribeToUnreadCount, subscribeToChatMessages, subscribeToMessagesRead } from './lib/socket';
 import SplashScreen from './components/SplashScreen';
 import WelcomeScreen from './components/WelcomeScreen';
 import LoginScreen from './components/LoginScreen';
@@ -68,6 +68,36 @@ export default function App() {
     }
   });
   const [activeChatTarget, setActiveChatTarget] = useState(null);
+  const [unreadChatsCount, setUnreadChatsCount] = useState(0);
+
+  const refreshUnreadChats = async () => {
+    const token = getAuthToken();
+    const user = currentUser || getStoredUser();
+    if (!token || !user) {
+      setUnreadChatsCount(0);
+      return;
+    }
+    try {
+      const convs = await fetchConversations();
+      if (Array.isArray(convs)) {
+        const myId = String(user._id || user.id || '');
+        const unreadPeople = new Set();
+        convs.forEach(c => {
+          const hasUnread = (c.unreadCount && c.unreadCount > 0) || 
+            (Array.isArray(c.messages) && c.messages.some(m => String(m.sender?._id || m.sender) !== myId && !m.read));
+          if (hasUnread) {
+            const otherP = (c.participants || []).find(p => String(p._id || p.id || p) !== myId);
+            const otherId = otherP ? String(otherP._id || otherP.id || otherP) : (c._id || c.id);
+            if (otherId) unreadPeople.add(otherId);
+          }
+        });
+        setUnreadChatsCount(unreadPeople.size);
+      }
+    } catch {
+      // Keep existing count on transient error
+    }
+  };
+
   const [showSplash, setShowSplash] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(15);
   const [loadingStatusText, setLoadingStatusText] = useState('Starting Campus Buddy...');
@@ -190,12 +220,13 @@ export default function App() {
     // 1. Initialize real-time Socket.io with user's JWT
     initSocketClient(token);
 
-    // 2. Load existing notifications from MongoDB
+    // 2. Load existing notifications and chats from MongoDB
     fetchNotifications().then(res => {
       if (res && Array.isArray(res.notifications)) {
         setNotifications(res.notifications);
       }
     }).catch(() => {});
+    refreshUnreadChats();
 
     // 3. Listen for live incoming notifications
     const unsubNotif = subscribeToNewNotifications((newNotif) => {
@@ -217,9 +248,25 @@ export default function App() {
       // Unread count synced via socket
     });
 
+    // 5. Listen for live incoming chat messages to refresh unread chats count
+    const unsubChat = subscribeToChatMessages((payload) => {
+      const myId = String(currentUser?._id || currentUser?.id || '');
+      const senderId = String(payload?.message?.sender?._id || payload?.message?.sender || '');
+      if (senderId && senderId !== myId) {
+        refreshUnreadChats();
+      }
+    });
+
+    // 6. Listen for read events to clear/update badge count
+    const unsubRead = subscribeToMessagesRead(() => {
+      refreshUnreadChats();
+    });
+
     return () => {
       unsubNotif();
       unsubCount();
+      unsubChat();
+      unsubRead();
     };
   }, [currentUser]);
 
@@ -277,6 +324,7 @@ export default function App() {
     setUserAds([]);
     setNotifications([]);
     setFavorites([]);
+    setUnreadChatsCount(0);
     setActiveNav('home');
     setPreviousNav('home');
     setSelectedProduct(null);
@@ -309,6 +357,7 @@ export default function App() {
     fetchNotifications().then(res => {
       if (res && Array.isArray(res.notifications)) setNotifications(res.notifications);
     }).catch(() => {});
+    refreshUnreadChats();
     fetchMyAds().then(ads => {
       setUserAds(Array.isArray(ads) ? ads : []);
     }).catch(() => {});
@@ -517,6 +566,7 @@ export default function App() {
                 notifications={notifications}
                 activeChatTarget={activeChatTarget}
                 setActiveChatTarget={setActiveChatTarget}
+                onRefreshUnreadChats={refreshUnreadChats}
                 onNavigateBack={() => setActiveNav('home')} 
               />
             )}
@@ -647,22 +697,32 @@ export default function App() {
 
           {/* 2. Chats Tab */}
           <button
-            onClick={() => setActiveNav('chats')}
+            onClick={() => {
+              setActiveNav('chats');
+              refreshUnreadChats();
+            }}
             className="flex flex-col items-center justify-center gap-1 py-0.5 px-2 transition-all active:scale-90 min-w-[56px]"
           >
-            <svg width="25" height="25" viewBox="0 0 24 24" className="transition-all duration-200">
-              <path 
-                fillRule="evenodd" 
-                clipRule="evenodd" 
-                d="M12 2.75C6.89137 2.75 2.75 6.89137 2.75 12C2.75 13.4811 3.09753 14.8788 3.7148 16.1181C3.96254 16.6155 4.05794 17.2103 3.90163 17.7945L3.30602 20.0205C3.19663 20.4293 3.57066 20.8034 3.97949 20.694L6.20553 20.0984C6.78973 19.9421 7.38451 20.0375 7.88191 20.2852C9.12121 20.9025 10.5189 21.25 12 21.25C17.1086 21.25 21.25 17.1086 21.25 12C21.25 6.89137 17.1086 2.75 12 2.75Z" 
-                fill={activeNav === 'chats' ? primaryColor : 'none'} 
-                stroke={activeNav === 'chats' ? primaryColor : inactiveColor} 
-                strokeWidth="1.5" 
-                className="transition-colors duration-200"
-              />
-              <path d="M8 10.5H16" stroke={activeNav === 'chats' ? '#FFFFFF' : inactiveColor} strokeWidth="1.6" strokeLinecap="round" />
-              <path d="M8 14H13.5" stroke={activeNav === 'chats' ? '#FFFFFF' : inactiveColor} strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
+            <div className="relative flex items-center justify-center">
+              <svg width="25" height="25" viewBox="0 0 24 24" className="transition-all duration-200">
+                <path 
+                  fillRule="evenodd" 
+                  clipRule="evenodd" 
+                  d="M12 2.75C6.89137 2.75 2.75 6.89137 2.75 12C2.75 13.4811 3.09753 14.8788 3.7148 16.1181C3.96254 16.6155 4.05794 17.2103 3.90163 17.7945L3.30602 20.0205C3.19663 20.4293 3.57066 20.8034 3.97949 20.694L6.20553 20.0984C6.78973 19.9421 7.38451 20.0375 7.88191 20.2852C9.12121 20.9025 10.5189 21.25 12 21.25C17.1086 21.25 21.25 17.1086 21.25 12C21.25 6.89137 17.1086 2.75 12 2.75Z" 
+                  fill={activeNav === 'chats' ? primaryColor : 'none'} 
+                  stroke={activeNav === 'chats' ? primaryColor : inactiveColor} 
+                  strokeWidth="1.5" 
+                  className="transition-colors duration-200"
+                />
+                <path d="M8 10.5H16" stroke={activeNav === 'chats' ? '#FFFFFF' : inactiveColor} strokeWidth="1.6" strokeLinecap="round" />
+                <path d="M8 14H13.5" stroke={activeNav === 'chats' ? '#FFFFFF' : inactiveColor} strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              {unreadChatsCount > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 w-4.5 h-4.5 min-w-[18px] min-h-[18px] max-w-[18px] max-h-[18px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs pointer-events-none">
+                  {unreadChatsCount > 9 ? '9+' : unreadChatsCount}
+                </span>
+              )}
+            </div>
             <span className={`text-xs transition-colors duration-200 ${
               activeNav === 'chats' ? 'text-[#1944F1] font-bold' : 'text-slate-400 font-medium'
             }`}>
