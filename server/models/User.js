@@ -18,6 +18,12 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  phone: {
+    type: String,
+    default: '',
+    trim: true,
+    index: true
+  },
   universityName: {
     type: String,
     default: 'Campus Member'
@@ -25,18 +31,6 @@ const userSchema = new mongoose.Schema({
   avatar: {
     type: String,
     default: '/avatar.svg'
-  },
-  dob: {
-    type: String,
-    default: ''
-  },
-  course: {
-    type: String,
-    default: ''
-  },
-  year: {
-    type: String,
-    default: '1st Year'
   },
   studentIdUrl: {
     type: String,

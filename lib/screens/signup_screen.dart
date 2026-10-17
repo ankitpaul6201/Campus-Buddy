@@ -13,6 +13,7 @@ class SignupScreen extends StatefulWidget {
 
 class _SignupScreenState extends State<SignupScreen> {
   final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   
@@ -20,13 +21,22 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _isLoading = false;
 
   bool get _isFormValid {
+    final phoneDigits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
     return _nameController.text.trim().isNotEmpty &&
+        phoneDigits.length == 10 &&
         _emailController.text.trim().isNotEmpty &&
         _passwordController.text.trim().isNotEmpty &&
         _selectedUniversity != null;
   }
 
   void _handleSignup() {
+    final phoneDigits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+    if (phoneDigits.length != 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Phone number must have exactly 10 digits')),
+      );
+      return;
+    }
     if (!_isFormValid) return;
 
     setState(() => _isLoading = true);
@@ -37,6 +47,7 @@ class _SignupScreenState extends State<SignupScreen> {
         // Payload with strictly universityId as source of truth
         final payload = {
           'fullName': _nameController.text.trim(),
+          'phone': phoneDigits,
           'email': _emailController.text.trim(),
           'universityId': _selectedUniversity!.id,
         };
@@ -133,6 +144,19 @@ class _SignupScreenState extends State<SignupScreen> {
                         onChanged: (_) => setState(() {}),
                         style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
                         decoration: _inputDecoration('Alex Rivera'),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Phone Number
+                      _buildLabel('PHONE NUMBER *'),
+                      TextField(
+                        controller: _phoneController,
+                        maxLength: 10,
+                        buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+                        onChanged: (_) => setState(() {}),
+                        keyboardType: TextInputType.phone,
+                        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
+                        decoration: _inputDecoration('10-digit Phone Number (e.g. 9876543210)'),
                       ),
                       const SizedBox(height: 14),
 

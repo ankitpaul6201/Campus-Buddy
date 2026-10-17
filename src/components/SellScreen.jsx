@@ -8,7 +8,8 @@ import {
   CheckCircle2,
   Trash2,
   Bell,
-  Check
+  Check,
+  Phone
 } from 'lucide-react';
 
 import { createProductListing, formatRupeePrice, updateAdLikes } from '../lib/api';
@@ -23,6 +24,8 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
   const [price, setPrice] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
+  const initialPhone = (user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('user_phone') : '') || '').toString().replace(/\D/g, '').slice(0, 10);
+  const [phone, setPhone] = useState(initialPhone);
   const [isNegotiable, setIsNegotiable] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -30,6 +33,7 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
   const [popupConfig, setPopupConfig] = useState(null);
 
   const cleanPriceValue = parseFloat(String(price).replace(/[^0-9.]/g, ''));
+  const cleanPhoneDigits = phone.replace(/\D/g, '');
   const isFormComplete = Boolean(
     photos.length > 0 &&
     title.trim() &&
@@ -40,7 +44,8 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
     cleanPriceValue > 0 &&
     cleanPriceValue <= 200000 &&
     description.trim() &&
-    location.trim()
+    location.trim() &&
+    cleanPhoneDigits.length === 10
   );
 
   const wishlistedProducts = (userAds || []).filter(item => favorites.includes(item.id || item._id));
@@ -228,6 +233,17 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
       return;
     }
 
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      setPopupConfig({
+        title: '10-Digit Phone Required',
+        message: 'Please enter an exact 10-digit phone number so buyers can reach you via the Call button.',
+        type: 'warning',
+        confirmText: 'Got it'
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const finalImages = photos.slice(0, 5);
@@ -240,11 +256,17 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
         category: category.trim(),
         condition: condition.trim(),
         location: location.trim(),
+        phone: cleanPhone,
+        contactNumber: cleanPhone,
         isNegotiable: Boolean(isNegotiable),
         images: finalImages,
         campusName: resolvedUni,
         universityName: resolvedUni
       };
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user_phone', cleanPhone);
+      }
 
       const created = await createProductListing(payload);
       setIsSubmitted(true);
@@ -570,6 +592,33 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
                   required
                 />
               </div>
+            </div>
+
+            {/* Contact Phone Number Field (Exactly 10 Digits) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-800 font-sans block">
+                  Contact Phone Number
+                </label>
+                <span className="text-[10px] font-semibold text-slate-400">
+                  {phone.replace(/\D/g, '').length}/10 digits
+                </span>
+              </div>
+              <div className="relative">
+                <Phone className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
+                <input 
+                  type="tel"
+                  value={phone}
+                  maxLength={10}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="10-digit Phone Number (e.g. 9876543210)"
+                  className="w-full pl-11 pr-4 py-3.5 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] border border-slate-100/80"
+                  required
+                />
+              </div>
+              <p className="text-[11px] text-slate-400 font-normal pl-1">
+                Buyers can click the Call button on this ad to call this 10-digit number.
+              </p>
             </div>
 
             {/* Negotiable Card Toggle */}

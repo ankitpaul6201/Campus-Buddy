@@ -47,8 +47,8 @@ async function getProducts(req, res, next) {
       }
 
       let query = Product.find(filter)
-        .select('title description price category condition images seller campusName universityName location status createdAt')
-        .populate('seller', 'fullName avatar universityName isVerified email')
+        .select('title description price category condition images seller campusName universityName location phone contactNumber status createdAt')
+        .populate('seller', 'fullName avatar universityName isVerified email phone')
         .sort({ createdAt: -1 })
         .limit(pageSize + 1)
         .lean();
@@ -62,24 +62,6 @@ async function getProducts(req, res, next) {
       let hasMore = rawItems.length > pageSize;
       let items = hasMore ? rawItems.slice(0, pageSize) : rawItems;
       let nextCursor = items.length > 0 ? items[items.length - 1]._id : null;
-
-      // Fallback: If 0 items match the strict university filter, return all active products across campuses
-      if (items.length === 0 && uniQuery && !cursor && (!page || parseInt(page, 10) <= 1)) {
-        const fallbackFilter = { status: 'active' };
-        if (category && category !== 'all') fallbackFilter.category = category;
-        const fallbackItems = await Product.find(fallbackFilter)
-          .select('title description price category condition images seller campusName universityName location status createdAt')
-          .populate('seller', 'fullName avatar universityName isVerified email')
-          .sort({ createdAt: -1 })
-          .limit(pageSize)
-          .lean();
-
-        if (fallbackItems.length > 0) {
-          items = fallbackItems;
-          hasMore = false;
-          nextCursor = null;
-        }
-      }
 
       // If client explicitly requested paginated format
       if (format === 'paginated') {
@@ -115,8 +97,8 @@ async function getMyAds(req, res, next) {
     const cacheKey = `user_ads:${userId}`;
     const products = await cacheService.getOrFetch(cacheKey, async () => {
       return Product.find({ seller: userId })
-        .select('title description price category condition images seller campusName universityName location status createdAt')
-        .populate('seller', 'fullName avatar universityName isVerified email')
+        .select('title description price category condition images seller campusName universityName location phone contactNumber status createdAt')
+        .populate('seller', 'fullName avatar universityName isVerified email phone')
         .sort({ createdAt: -1 })
         .lean();
     }, 15);
@@ -138,8 +120,8 @@ async function getProductById(req, res, next) {
 
     const product = await cacheService.getOrFetch(cacheKey, async () => {
       return Product.findById(productId)
-        .select('title description price category condition images seller campusName universityName location status createdAt updatedAt')
-        .populate('seller', 'fullName avatar universityName isVerified email createdAt')
+        .select('title description price category condition images seller campusName universityName location phone contactNumber status createdAt updatedAt')
+        .populate('seller', 'fullName avatar universityName isVerified email phone createdAt')
         .lean();
     }, 60);
 
@@ -159,7 +141,7 @@ async function getProductById(req, res, next) {
  */
 async function createProduct(req, res, next) {
   try {
-    const { title, description, price, category, condition, images, location, campusName, universityName } = req.body;
+    const { title, description, price, category, condition, images, location, campusName, universityName, phone, phoneNumber, contactNumber } = req.body;
     const userId = (req.user && req.user.id) || (req.auth && req.auth.userId);
 
     const numericPrice = Number(price) || 0;
@@ -183,8 +165,20 @@ async function createProduct(req, res, next) {
     }
 
     // Fetch user profile once for campus resolution and response payload
-    const userDoc = await User.findById(userId).select('fullName avatar universityName isVerified email').lean();
+    const userDoc = await User.findById(userId).select('fullName avatar universityName isVerified email phone').lean();
     const resolvedCampus = campusName || universityName || userDoc?.universityName || 'Campus Member';
+
+    // Validate 10-digit phone number strictly
+    const rawContactPhone = (phone || contactNumber || phoneNumber || userDoc?.phone || '').toString().replace(/\D/g, '');
+    const cleanPhone = rawContactPhone.length >= 10 ? rawContactPhone.slice(-10) : '';
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      return res.status(400).json({ error: 'Phone number must have exactly 10 digits' });
+    }
+
+    // Sync phone back to user account if missing or updated
+    if (!userDoc?.phone || userDoc.phone !== cleanPhone) {
+      User.findByIdAndUpdate(userId, { phone: cleanPhone }).catch(e => console.warn('User phone sync error:', e));
+    }
 
     const product = new Product({
       title: title.trim(),
@@ -197,6 +191,8 @@ async function createProduct(req, res, next) {
       campusName: resolvedCampus,
       universityName: resolvedCampus,
       location: location.trim(),
+      phone: cleanPhone,
+      contactNumber: cleanPhone,
       status: 'active'
     });
 
@@ -211,7 +207,12 @@ async function createProduct(req, res, next) {
     }
 
     const responsePayload = product.toObject();
-    responsePayload.seller = userDoc || { _id: userId, fullName: 'Student', universityName: resolvedCampus };
+    responsePayload.phone = cleanPhone;
+    responsePayload.contactNumber = cleanPhone;
+    responsePayload.seller = {
+      ...(userDoc || { _id: userId, fullName: 'Student', universityName: resolvedCampus }),
+      phone: cleanPhone
+    };
 
     res.status(201).json(responsePayload);
   } catch (err) {
@@ -233,7 +234,7 @@ async function updateProductStatus(req, res, next) {
       { status },
       { new: true }
     )
-      .populate('seller', 'fullName avatar universityName isVerified email')
+      .populate('seller', 'fullName avatar universityName isVerified email phone')
       .lean();
 
     if (!product) {

@@ -27,7 +27,12 @@ export const setAuthToken = (token) => {
 export const getStoredUser = () => {
   try {
     const raw = localStorage.getItem('campus_user');
-    return raw ? JSON.parse(raw) : null;
+    const user = raw ? JSON.parse(raw) : null;
+    if (user && !user.phone) {
+      const storedPhone = localStorage.getItem('user_phone');
+      if (storedPhone) user.phone = storedPhone;
+    }
+    return user;
   } catch {
     return null;
   }
@@ -48,7 +53,14 @@ export async function apiSignup(userData) {
 
   if (data.token) {
     setAuthToken(data.token);
-    localStorage.setItem('campus_user', JSON.stringify(data.user));
+    const userToStore = {
+      ...(data.user || {}),
+      phone: data.user?.phone || userData.phone || userData.phoneNumber || ''
+    };
+    localStorage.setItem('campus_user', JSON.stringify(userToStore));
+    if (userToStore.phone) {
+      localStorage.setItem('user_phone', userToStore.phone);
+    }
   }
   return data;
 }
@@ -119,14 +131,54 @@ export async function apiUpdateProfile(profileData) {
           localStorage.setItem('campus_user', JSON.stringify(data.user));
           if (data.user.avatar) localStorage.setItem('user_custom_avatar', data.user.avatar);
           if (data.user.fullName) localStorage.setItem('user_custom_fullname', data.user.fullName);
-          if (data.user.dob) localStorage.setItem('user_dob', data.user.dob);
-          if (data.user.course) localStorage.setItem('user_course', data.user.course);
-          if (data.user.year) localStorage.setItem('user_year', data.user.year);
+          if (data.user.phone) {
+            localStorage.setItem('user_phone', data.user.phone);
+            // Synchronize updated phone number across local ad caches immediately
+            const newPhone = data.user.phone;
+            const uid = String(data.user._id || data.user.id || '');
+            const updateAdPhone = (ad) => {
+              if (!ad) return ad;
+              const sellerId = typeof ad.seller === 'object' ? String(ad.seller?._id || ad.seller?.id || '') : String(ad.seller || '');
+              if (sellerId === uid || !sellerId) {
+                return {
+                  ...ad,
+                  phone: newPhone,
+                  contactNumber: newPhone,
+                  seller: typeof ad.seller === 'object' ? { ...ad.seller, phone: newPhone } : ad.seller
+                };
+              }
+              return ad;
+            };
+
+            try {
+              if (uid) {
+                const uKey = `campus_user_ads_${uid}`;
+                const uAds = JSON.parse(localStorage.getItem(uKey) || '[]');
+                if (Array.isArray(uAds)) {
+                  localStorage.setItem(uKey, JSON.stringify(uAds.map(updateAdPhone)));
+                }
+              }
+              const generalAds = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
+              if (Array.isArray(generalAds)) {
+                localStorage.setItem('campus_user_ads', JSON.stringify(generalAds.map(updateAdPhone)));
+              }
+              const prodCache = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
+              if (Array.isArray(prodCache)) {
+                localStorage.setItem('campus_products_cache', JSON.stringify(prodCache.map(updateAdPhone)));
+              }
+            } catch (syncErr) {
+              console.warn('Local ad phone sync warning:', syncErr);
+            }
+          }
         }
         return data;
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server update failed (${res.status})`);
       }
     } catch (err) {
-      console.warn('Backend update profile offline, caching locally:', err);
+      console.warn('Backend update profile failed:', err);
+      throw err;
     }
   }
 
@@ -138,7 +190,24 @@ export async function apiUpdateProfile(profileData) {
     ...(updatedUser || {})
   };
   localStorage.setItem('campus_user', JSON.stringify(mergedUser));
+  if (mergedUser.phone) {
+    localStorage.setItem('user_phone', mergedUser.phone);
+  }
   return { user: mergedUser };
+}
+
+// Fetch single product listing by ID with fresh seller contact info from MongoDB
+export async function fetchProductById(productId) {
+  if (!productId) return null;
+  try {
+    const res = await fetch(`${API_BASE_URL}/products/${productId}`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('fetchProductById unavailable:', err);
+  }
+  return null;
 }
 
 // Upload avatar directly to Cloudinary and persist to user profile
@@ -275,7 +344,15 @@ export function apiLogout() {
       localStorage.removeItem(`campus_user_ads_${currentUserId}`);
     }
   } catch {}
+  localStorage.removeItem('campus_products_cache');
   localStorage.removeItem('campus_user_ads');
+  try {
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('campus_products_cache')) {
+        localStorage.removeItem(key);
+      }
+    });
+  } catch {}
   localStorage.removeItem('campus_jwt_token');
   localStorage.removeItem('campus_user');
   localStorage.removeItem('user_custom_avatar');
@@ -323,7 +400,7 @@ export async function fetchMarketplaceHome(university) {
   }
 }
 
-// Fetch all active campus product listings with in-flight deduplication
+// Fetch all active campus product listings strictly within the target university
 export async function fetchProducts(university) {
   const cacheKey = (university || 'all').toLowerCase().trim();
   if (inFlightRequests.has(cacheKey)) {
@@ -339,29 +416,50 @@ export async function fetchProducts(university) {
       if (!res.ok) throw new Error('Failed to fetch products');
       const data = await res.json();
       if (Array.isArray(data)) {
-        // Sync to local cache
-        const existingCached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
-        const mergedMap = new Map();
-        existingCached.forEach(p => p && (p._id || p.id) && mergedMap.set(String(p._id || p.id), p));
-        data.forEach(p => p && (p._id || p.id) && mergedMap.set(String(p._id || p.id), p));
-        const allMerged = Array.from(mergedMap.values());
-        localStorage.setItem('campus_products_cache', JSON.stringify(allMerged));
-        return allMerged;
+        const uniClean = (university || '').toLowerCase().trim();
+        // Strictly verify that every returned product belongs to the requested university
+        const filteredData = uniClean
+          ? data.filter(p => {
+              if (!p) return false;
+              const pCampus = (p.campusName || '').toLowerCase().trim();
+              const pUni = (p.universityName || '').toLowerCase().trim();
+              const sUni = (p.seller?.universityName || '').toLowerCase().trim();
+              return (
+                (pCampus && (pCampus.includes(uniClean) || uniClean.includes(pCampus))) ||
+                (pUni && (pUni.includes(uniClean) || uniClean.includes(pUni))) ||
+                (sUni && (sUni.includes(uniClean) || uniClean.includes(sUni)))
+              );
+            })
+          : data;
+
+        // Cache exclusively the university's own listings
+        try {
+          localStorage.setItem(`campus_products_cache_${cacheKey}`, JSON.stringify(filteredData));
+          localStorage.setItem('campus_products_cache', JSON.stringify(filteredData));
+        } catch {}
+
+        return filteredData;
       }
       return [];
     } catch (err) {
       console.warn('Backend fetchProducts unavailable, using local cache:', err);
       try {
-        const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
-        if (university && university.trim()) {
-          const u = university.toLowerCase().trim();
-          return cached.filter(p => 
-            (p.campusName && p.campusName.toLowerCase().includes(u)) ||
-            (p.universityName && p.universityName.toLowerCase().includes(u)) ||
-            (p.seller?.universityName && p.seller.universityName.toLowerCase().includes(u))
-          );
+        const uniClean = (university || '').toLowerCase().trim();
+        const cached = JSON.parse(localStorage.getItem(`campus_products_cache_${cacheKey}`) || localStorage.getItem('campus_products_cache') || '[]');
+        if (uniClean && Array.isArray(cached)) {
+          return cached.filter(p => {
+            if (!p) return false;
+            const pCampus = (p.campusName || '').toLowerCase().trim();
+            const pUni = (p.universityName || '').toLowerCase().trim();
+            const sUni = (p.seller?.universityName || '').toLowerCase().trim();
+            return (
+              (pCampus && (pCampus.includes(uniClean) || uniClean.includes(pCampus))) ||
+              (pUni && (pUni.includes(uniClean) || uniClean.includes(pUni))) ||
+              (sUni && (sUni.includes(uniClean) || uniClean.includes(sUni)))
+            );
+          });
         }
-        return cached;
+        return Array.isArray(cached) ? cached : [];
       } catch {
         return [];
       }
@@ -411,6 +509,8 @@ export async function uploadProductImage(imageFile, explicitToken) {
 // Create a new product listing
 export async function createProductListing(productData, explicitToken) {
   const token = explicitToken || getAuthToken();
+  const storedUser = getStoredUser();
+  const cleanPhone = (productData.phone || productData.contactNumber || (typeof window !== 'undefined' ? localStorage.getItem('user_phone') : '') || storedUser?.phone || '').toString().replace(/\D/g, '').slice(-10);
   let createdProduct = null;
 
   try {
@@ -420,7 +520,11 @@ export async function createProductListing(productData, explicitToken) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(productData),
+      body: JSON.stringify({
+        ...productData,
+        phone: cleanPhone,
+        contactNumber: cleanPhone
+      }),
     });
 
     if (res.ok) {
@@ -435,12 +539,13 @@ export async function createProductListing(productData, explicitToken) {
 
   // If backend was unreachable or returned product, ensure it's safely stored locally
   if (!createdProduct) {
-    const storedUser = getStoredUser();
     const customAvatar = typeof window !== 'undefined' ? localStorage.getItem('user_custom_avatar') : null;
     const customName = typeof window !== 'undefined' ? localStorage.getItem('user_custom_fullname') : null;
     createdProduct = {
       _id: 'prod_' + Date.now(),
       ...productData,
+      phone: cleanPhone,
+      contactNumber: cleanPhone,
       status: 'active',
       createdAt: new Date().toISOString(),
       seller: {
@@ -449,9 +554,16 @@ export async function createProductListing(productData, explicitToken) {
         fullName: customName || storedUser?.fullName || storedUser?.name || 'Student Seller',
         avatar: customAvatar || storedUser?.avatar || '/avatar-blue-2.svg',
         universityName: productData.universityName || storedUser?.universityName || 'Campus Member',
-        isVerified: Boolean(storedUser?.isVerified)
+        isVerified: Boolean(storedUser?.isVerified),
+        phone: cleanPhone
       }
     };
+  } else {
+    if (!createdProduct.phone) createdProduct.phone = cleanPhone;
+    if (!createdProduct.contactNumber) createdProduct.contactNumber = cleanPhone;
+    if (createdProduct.seller && typeof createdProduct.seller === 'object' && !createdProduct.seller.phone) {
+      createdProduct.seller.phone = cleanPhone;
+    }
   }
 
   // Sync to user-scoped ads and products cache

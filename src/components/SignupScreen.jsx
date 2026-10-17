@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, CheckCircle2, ChevronRight, ChevronDown, Check, School,
   User, Lock, Mail, Upload, FileText, Calendar as CalendarIcon, Eye, EyeOff,
-  Scan, ShieldCheck, AlertCircle, XCircle, RefreshCw, Sparkles, Loader2, GraduationCap, WifiOff
+  Scan, ShieldCheck, AlertCircle, XCircle, RefreshCw, Sparkles, Loader2, GraduationCap, WifiOff,
+  Phone
 } from 'lucide-react';
 import { Calendar } from './ui/calendar';
 import { searchUniversities } from '../services/universityService';
@@ -18,6 +19,18 @@ const ACADEMIC_YEAR_OPTIONS = [
   { value: "Postgraduate / Master's", label: "Postgraduate / Master's" },
   { value: 'Ph.D. Scholar', label: 'Ph.D. Scholar' }
 ];
+
+function TickSvg({ className = "w-4 h-4 text-emerald-500 fill-current shrink-0" }) {
+  return (
+    <svg 
+      viewBox="0 0 191.667 191.667" 
+      className={className}
+      fill="currentColor"
+    >
+      <path d="M95.833,0C42.991,0,0,42.99,0,95.833s42.991,95.834,95.833,95.834s95.833-42.991,95.833-95.834S148.676,0,95.833,0z M150.862,79.646l-60.207,60.207c-2.56,2.56-5.963,3.969-9.583,3.969c-3.62,0-7.023-1.409-9.583-3.969l-30.685-30.685 c-2.56-2.56-3.97-5.963-3.97-9.583c0-3.621,1.41-7.024,3.97-9.584c2.559-2.56,5.962-3.97,9.583-3.97c3.62,0,7.024,1.41,9.583,3.971 l21.101,21.1l50.623-50.623c2.56-2.56,5.963-3.969,9.583-3.969c3.62,0,7.023,1.409,9.583,3.969 C156.146,65.765,156.146,74.362,150.862,79.646z"/>
+    </svg>
+  );
+}
 
 export default function SignupScreen({ onNavigate, onLoginSuccess }) {
   const [step, setStep] = useState(1);
@@ -80,10 +93,22 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
     dob: '',
     course: '',
     year: '1st Year',
+    phone: '',
     email: '',
     password: '',
     confirmPassword: ''
   });
+
+  const isStep2Complete = Boolean(
+    formData.name?.trim() &&
+    formData.dob &&
+    formData.course?.trim() &&
+    formData.year &&
+    formData.phone?.trim() &&
+    formData.email?.trim() &&
+    formData.password &&
+    formData.confirmPassword
+  );
 
   // ID Verification Process state
   const [verificationProgress, setVerificationProgress] = useState({
@@ -167,12 +192,8 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
       setError('Please select your university or campus to continue.');
       return;
     }
-    if (isUploadingId) {
-      setError('Please wait until your Student ID Card has completely uploaded.');
-      return;
-    }
-    if (!uploadedIdUrl) {
-      setError('Please upload your Student ID Card for verification before continuing.');
+    if (!studentIdFile) {
+      setError('Please upload your Student ID Card before continuing.');
       return;
     }
     const uniName = typeof formData.university === 'string' ? formData.university : (formData.university?.name || formData.university?.universityName || 'Campus Member');
@@ -181,7 +202,7 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
     setStep(2);
   };
 
-  // Run ID Verification with OCR and credential matching
+  // Run ID Verification with OCR and credential matching + upload to Cloudinary in this step
   const startIdVerification = async (fileToScan = studentIdFile) => {
     if (!fileToScan) {
       setError('Student ID document is missing. Please upload your student ID.');
@@ -193,7 +214,7 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
     setVerificationProgress({
       phase: 'scanning',
       percentage: 15,
-      message: 'Initializing neural OCR engine...',
+      message: 'Scanning document & analyzing credentials...',
       campusMatched: false,
       campusMatchReason: '',
       nameMatched: false,
@@ -213,13 +234,30 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
           setVerificationProgress(prev => ({
             ...prev,
             phase: progress.phase,
-            percentage: progress.percentage,
+            percentage: Math.min(progress.percentage, 85),
             message: progress.message
           }));
         }
       );
 
+      // ONLY IF VERIFIED: upload and save to Cloudinary!
+      // If NOT verified or rejected, DO NOT upload to Cloudinary.
       if (result.success) {
+        setVerificationProgress(prev => ({
+          ...prev,
+          percentage: 90,
+          message: 'ID verified! Storing verified credential...'
+        }));
+
+        let finalIdUrl = '';
+        try {
+          finalIdUrl = await uploadStudentId(fileToScan);
+          setUploadedIdUrl(finalIdUrl);
+          localStorage.setItem('user_student_id_url', finalIdUrl);
+        } catch (uploadErr) {
+          console.warn('Cloudinary upload error after successful verification:', uploadErr);
+        }
+
         localStorage.setItem('user_id_verified', 'true');
         localStorage.setItem('pending_id_verified', 'true');
         setVerificationProgress({
@@ -236,9 +274,10 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
 
         // Small delay to let user see the completed checklist with checkmarks
         setTimeout(() => {
-          executeSignup();
+          executeSignup(finalIdUrl);
         }, 1200);
       } else {
+        // Verification failed or was rejected: NEVER upload to Cloudinary!
         setVerificationProgress({
           phase: 'failed',
           percentage: 100,
@@ -272,16 +311,7 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
       setStudentIdFileName(file.name);
       if (idPreviewUrl) URL.revokeObjectURL(idPreviewUrl);
       setIdPreviewUrl(URL.createObjectURL(file));
-
-      // Background upload to Cloudinary
-      uploadStudentId(file)
-        .then(url => {
-          setUploadedIdUrl(url);
-          localStorage.setItem('user_student_id_url', url);
-        })
-        .catch(err => console.error('Cloudinary student ID upload error:', err));
-
-      // Re-trigger verification
+      setUploadedIdUrl('');
       startIdVerification(file);
     }
   };
@@ -294,6 +324,11 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
     if (!formData.name.trim()) { setError('Please enter your full name.'); return; }
     if (!formData.dob) { setError('Please enter your date of birth.'); return; }
     if (!formData.course.trim()) { setError('Please enter your course or major (e.g. B.Tech / B.Sc).'); return; }
+    if (!formData.phone.trim()) { setError('Please enter your 10-digit phone number.'); return; }
+    const phoneDigits = formData.phone.trim().replace(/\D/g, '');
+    if (phoneDigits.length !== 10) {
+      setError('Phone number must have exactly 10 digits.'); return;
+    }
     if (!formData.email.trim() || !formData.email.includes('@')) {
       setError('Please enter a valid email address.'); return;
     }
@@ -315,7 +350,7 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
   };
 
   // Execute account creation directly in MongoDB Atlas once ID verification passes
-  const executeSignup = async () => {
+  const executeSignup = async (passedIdUrl = null) => {
     setIsSubmitting(true);
     setError('');
     try {
@@ -327,18 +362,20 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
       localStorage.setItem('user_course', formData.course.trim());
       localStorage.setItem('pending_year', formData.year);
       localStorage.setItem('user_year', formData.year);
+      const cleanPhone = (formData.phone || '').trim().replace(/\D/g, '').slice(0, 10);
+      localStorage.setItem('pending_phone', cleanPhone);
+      localStorage.setItem('user_phone', cleanPhone);
       localStorage.setItem('user_id_verified', 'true');
       localStorage.setItem('pending_id_verified', 'true');
 
-      const studentIdUrl = uploadedIdUrl || localStorage.getItem('user_student_id_url') || '';
+      const studentIdUrl = passedIdUrl || uploadedIdUrl || localStorage.getItem('user_student_id_url') || '';
 
       const result = await apiSignup({
         name: formData.name.trim(),
         email: formData.email.trim(),
         password: formData.password,
-        dob: formData.dob,
-        course: formData.course.trim(),
-        year: formData.year,
+        phone: cleanPhone,
+        phoneNumber: cleanPhone,
         universityName: uniName,
         studentIdUrl: studentIdUrl,
         isVerified: true
@@ -531,28 +568,19 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
                     <span className="text-rose-500 font-bold">*Required</span>
                   </label>
                   <label className={`w-full p-3.5 rounded-2xl border border-dashed transition-all cursor-pointer flex items-center justify-between group ${
-                    isUploadingId
-                      ? 'border-blue-400 bg-blue-50/60 pointer-events-none'
-                      : uploadedIdUrl
-                        ? 'border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50/70'
-                        : 'border-slate-300 bg-[#F9FAFB] hover:bg-slate-100/80'
+                    studentIdFile
+                      ? 'border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50/70'
+                      : 'border-slate-300 bg-[#F9FAFB] hover:bg-slate-100/80'
                   }`}>
                     <div className="flex items-center gap-3">
                       {idPreviewUrl ? (
                         <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shrink-0 relative">
                           <img src={idPreviewUrl} alt="ID preview" className="w-full h-full object-cover" />
-                          {isUploadingId && (
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                              <Loader2 className="w-4 h-4 text-white animate-spin" />
-                            </div>
-                          )}
                         </div>
                       ) : (
                         <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 text-[#1944F1] flex items-center justify-center shrink-0">
-                          {isUploadingId ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-[#1944F1]" />
-                          ) : uploadedIdUrl ? (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                          {studentIdFile ? (
+                            <TickSvg className="w-4.5 h-4.5 text-emerald-500 fill-current shrink-0" />
                           ) : (
                             <Upload className="w-4 h-4" />
                           )}
@@ -560,71 +588,36 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
                       )}
                       <div className="text-left">
                         <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 leading-tight">
-                          {isUploadingId ? (
-                            'Uploading...'
-                          ) : uploadedIdUrl ? (
+                          {studentIdFile ? (
                             <>
-                              <svg 
-                                viewBox="0 0 191.667 191.667" 
-                                className="w-4 h-4 text-emerald-500 fill-current shrink-0"
-                              >
-                                <path d="M95.833,0C42.991,0,0,42.99,0,95.833s42.991,95.834,95.833,95.834s95.833-42.991,95.833-95.834S148.676,0,95.833,0z M150.862,79.646l-60.207,60.207c-2.56,2.56-5.963,3.969-9.583,3.969c-3.62,0-7.023-1.409-9.583-3.969l-30.685-30.685 c-2.56-2.56-3.97-5.963-3.97-9.583c0-3.621,1.41-7.024,3.97-9.584c2.559-2.56,5.962-3.97,9.583-3.97c3.62,0,7.024,1.41,9.583,3.971 l21.101,21.1l50.623-50.623c2.56-2.56,5.963-3.969,9.583-3.969c3.62,0,7.023,1.409,9.583,3.969 C156.146,65.765,156.146,74.362,150.862,79.646z"/>
-                              </svg>
-                              <span>Uploaded</span>
+                              <TickSvg className="w-4 h-4 text-emerald-500 fill-current shrink-0" />
+                              <span className="truncate max-w-[180px]">Uploaded</span>
                             </>
                           ) : (
                             'Upload College ID Card'
                           )}
                         </span>
-                        {!isUploadingId && !uploadedIdUrl && (
-                          <span className="text-[10px] text-slate-400 block leading-tight mt-0.5">
-                            PNG or JPG format
-                          </span>
-                        )}
                       </div>
                     </div>
-                    {!isUploadingId && (
-                      <span className={`text-xs font-semibold px-3 py-1 rounded-xl border shadow-2xs transition-colors shrink-0 ${
-                        uploadedIdUrl
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                          : 'bg-white text-[#1944F1] border-blue-200 group-hover:bg-blue-50'
-                      }`}>
-                        {uploadedIdUrl ? 'Change' : 'Browse'}
-                      </span>
-                    )}
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-xl border shadow-2xs transition-colors shrink-0 ${
+                      studentIdFile
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-white text-[#1944F1] border-blue-200 group-hover:bg-blue-50'
+                    }`}>
+                      {studentIdFile ? 'Change' : 'Browse'}
+                    </span>
                     <input
                       type="file"
                       accept="image/*"
-                      disabled={isUploadingId}
                       className="hidden"
-                      onChange={async (e) => {
+                      onChange={(e) => {
                         if (e.target.files?.[0]) {
                           const file = e.target.files[0];
                           setStudentIdFile(file);
+                          setStudentIdFileName(file.name);
                           if (idPreviewUrl) URL.revokeObjectURL(idPreviewUrl);
                           setIdPreviewUrl(URL.createObjectURL(file));
-                          setStudentIdFileName('Uploading...');
-                          setIsUploadingId(true);
-                          setUploadedIdUrl('');
                           setError('');
-                          try {
-                            const url = await uploadStudentId(file);
-                            if (url) {
-                              setUploadedIdUrl(url);
-                              localStorage.setItem('user_student_id_url', url);
-                              setStudentIdFileName('Uploaded');
-                            } else {
-                              throw new Error('Upload failed - no URL returned');
-                            }
-                          } catch (err) {
-                            console.error('Cloudinary student ID upload error:', err);
-                            setError('Failed to upload ID card. Please ensure a stable connection and try again.');
-                            setStudentIdFileName('');
-                            setUploadedIdUrl('');
-                            localStorage.removeItem('user_student_id_url');
-                          } finally {
-                            setIsUploadingId(false);
-                          }
                         }
                       }}
                     />
@@ -634,7 +627,7 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
 
               <div className="pt-2">
                 {(() => {
-                  const isContinueDisabled = !formData.university || isUploadingId || !uploadedIdUrl;
+                  const isContinueDisabled = !formData.university || !studentIdFile;
                   return (
                     <button
                       type="button"
@@ -647,19 +640,14 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
                           : 'bg-[#0F0F0F] hover:bg-black text-white shadow-md active:scale-[0.98] cursor-pointer'
                       }`}
                     >
-                      {isUploadingId ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
-                          <span>Uploading...</span>
-                        </>
-                      ) : !uploadedIdUrl ? (
-                        <>
-                          <span>Upload ID Card to Continue</span>
-                          <ChevronRight className="w-5 h-5 opacity-40" />
-                        </>
-                      ) : !formData.university ? (
+                      {!formData.university ? (
                         <>
                           <span>Select College to Continue</span>
+                          <ChevronRight className="w-5 h-5 opacity-40" />
+                        </>
+                      ) : !studentIdFile ? (
+                        <>
+                          <span>Upload ID Card to Continue</span>
                           <ChevronRight className="w-5 h-5 opacity-40" />
                         </>
                       ) : (
@@ -816,6 +804,23 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
                   )}
                 </div>
 
+                {/* Phone Number */}
+                <div className="relative">
+                  <Phone className="w-5 h-5 text-slate-400 absolute left-4 top-4 pointer-events-none" />
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    maxLength={10}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setFormData(prev => ({ ...prev, phone: clean }));
+                    }}
+                    placeholder="10-digit Phone Number (e.g. 9876543210)"
+                    autoComplete="tel"
+                    className="w-full pl-12 pr-4 py-4 bg-[#F3F4F6] text-slate-900 placeholder-slate-400 rounded-2xl text-base font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all"
+                  />
+                </div>
+
                 <div className="relative">
                   <Mail className="w-5 h-5 text-slate-400 absolute left-4 top-4" />
                   <input
@@ -871,11 +876,25 @@ export default function SignupScreen({ onNavigate, onLoginSuccess }) {
                 <div className="pt-2">
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-4 px-6 rounded-2xl bg-[#0F0F0F] hover:bg-black text-white font-semibold text-base shadow-md transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                    id="create-account-continue-btn"
+                    disabled={!isStep2Complete || isSubmitting}
+                    className={`w-full py-4 px-6 rounded-2xl font-semibold text-base transition-all flex items-center justify-center gap-2 ${
+                      !isStep2Complete || isSubmitting
+                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none select-none'
+                        : 'bg-[#0F0F0F] hover:bg-black text-white shadow-md active:scale-[0.98] cursor-pointer'
+                    }`}
                   >
-                    <span>Verify ID & Create Account</span>
-                    <ChevronRight className="w-5 h-5" />
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                        <span>Creating Account...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Continue</span>
+                        <ChevronRight className="w-5 h-5" />
+                      </>
+                    )}
                   </button>
                 </div>
               </form>

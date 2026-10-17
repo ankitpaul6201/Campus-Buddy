@@ -35,7 +35,8 @@ import {
   updateAdLikes,
   getSellerRatings,
   submitSellerRating,
-  apiReportProduct
+  apiReportProduct,
+  fetchProductById
 } from '../lib/api';
 
 export default function ProductDetailsScreen({
@@ -50,7 +51,32 @@ export default function ProductDetailsScreen({
   onManageMyAds,
   onViewSellerInfo
 }) {
-  const safeProduct = product || {};
+  const [liveProduct, setLiveProduct] = useState(product);
+
+  useEffect(() => {
+    setLiveProduct(product);
+  }, [product]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const targetId = product?._id || product?.id;
+    if (targetId) {
+      fetchProductById(targetId).then(fresh => {
+        if (isMounted && fresh) {
+          setLiveProduct(prev => ({
+            ...(prev || {}),
+            ...fresh,
+            seller: typeof fresh.seller === 'object' && fresh.seller !== null
+              ? { ...((prev && prev.seller) || {}), ...fresh.seller }
+              : fresh.seller
+          }));
+        }
+      }).catch(() => {});
+    }
+    return () => { isMounted = false; };
+  }, [product?._id, product?.id]);
+
+  const safeProduct = liveProduct || product || {};
   const productId = safeProduct._id || safeProduct.id;
   const isFav = (favorites || []).some(id => String(id) === String(productId));
 
@@ -90,6 +116,54 @@ export default function ProductDetailsScreen({
     (currentUserEmail && sellerEmail && currentUserEmail === sellerEmail) ||
     (Array.isArray(userAds) && userAds.some(a => String(a._id || a.id) === String(productId)))
   );
+
+  // Strictly resolve exactly 10-digit seller phone number
+  const resolveSellerPhoneNumber = () => {
+    // 1. If viewing own listing, return user's latest phone directly
+    if (isMyListing && user?.phone) {
+      const uDigits = String(user.phone).replace(/\D/g, '');
+      if (uDigits.length >= 10) return uDigits.slice(-10);
+    }
+
+    // 2. Priority: seller object phone from fresh MongoDB doc, then product contactNumber/phone
+    let raw = sellerObj?.phone || sellerObj?.phoneNumber || safeProduct.contactNumber || safeProduct.phone || '';
+
+    // 3. Check userAds if user owns this listing locally
+    if (!raw && Array.isArray(userAds)) {
+      const match = userAds.find(a => String(a._id || a.id) === String(productId));
+      if (match) {
+        raw = match.phone || match.contactNumber || match.seller?.phone || '';
+      }
+    }
+
+    // 4. Fallback to product cache
+    if (!raw) {
+      try {
+        const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
+        const match = cached.find(p => String(p._id || p.id) === String(productId));
+        if (match) {
+          raw = match.phone || match.contactNumber || match.seller?.phone || '';
+        }
+      } catch (e) {}
+    }
+
+    const digits = String(raw).replace(/\D/g, '');
+    return digits.length >= 10 ? digits.slice(-10) : '';
+  };
+
+  const sellerPhoneNumber = resolveSellerPhoneNumber();
+
+  const handleCallSeller = () => {
+    if (sellerPhoneNumber && sellerPhoneNumber.length === 10) {
+      const telUrl = `tel:${sellerPhoneNumber}`;
+      try {
+        window.open(telUrl, '_system');
+      } catch (err) {}
+      window.location.href = telUrl;
+    } else {
+      setShowCallModal(true);
+    }
+  };
 
   const targetSellerKey = sellerId || sellerNameNormalized || 'seller';
   const [sellerRatingData, setSellerRatingData] = useState(() => getSellerRatings(targetSellerKey));
@@ -621,16 +695,9 @@ export default function ProductDetailsScreen({
           <div className="w-full flex items-center gap-2.5">
             <button
               type="button"
-              onClick={() => {
-                const phoneNumber = product.phone || product.contactNumber || sellerObj.phone;
-                if (phoneNumber) {
-                  window.location.href = `tel:${phoneNumber}`;
-                } else {
-                  setShowCallModal(true);
-                }
-              }}
-              className="py-3.5 px-5 rounded-2xl bg-[#F0FDF4] hover:bg-[#DCFCE7] text-emerald-700 border border-emerald-200 font-bold text-xs shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2 shrink-0"
-              title="Call Seller"
+              onClick={handleCallSeller}
+              className="py-3.5 px-5 rounded-2xl bg-[#F0FDF4] hover:bg-[#DCFCE7] text-emerald-700 border border-emerald-200 font-bold text-xs shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+              title={sellerPhoneNumber ? `Call ${sellerPhoneNumber}` : "Call Seller"}
             >
               <Phone className="w-4 h-4 text-emerald-600" />
               <span>Call</span>
@@ -688,9 +755,9 @@ export default function ProductDetailsScreen({
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-slate-900">Contact {sellerName}</h3>
                 <p className="text-xs text-slate-500">
-                  {product.phone || product.contactNumber || sellerObj.phone
-                    ? `Phone: ${product.phone || product.contactNumber || sellerObj.phone}`
-                    : `Direct phone number is private. You can chat directly with ${sellerName} inside Campus Buddy.`}
+                  {sellerPhoneNumber
+                    ? `Phone: +91 ${sellerPhoneNumber}`
+                    : `Direct phone number is private or not provided. You can chat directly with ${sellerName} inside Campus Buddy.`}
                 </p>
               </div>
               <div className="flex gap-2 pt-2">
@@ -701,33 +768,47 @@ export default function ProductDetailsScreen({
                 >
                   Close
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCallModal(false);
-                    const targetSellerId = sellerId || ('seller_' + productId);
-                    const productTitle = product.title || 'Campus Item';
-                    const priceText = formatRupeePrice(product.price);
-                    const imageUrl = currentImage;
-                    const avatar = resolvedSellerAvatar || sellerInitial;
+                {sellerPhoneNumber ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCallModal(false);
+                      handleCallSeller();
+                    }}
+                    className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white font-semibold text-xs hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    <span>Call Now</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCallModal(false);
+                      const targetSellerId = sellerId || ('seller_' + productId);
+                      const productTitle = product.title || 'Campus Item';
+                      const priceText = formatRupeePrice(product.price);
+                      const imageUrl = currentImage;
+                      const avatar = resolvedSellerAvatar || sellerInitial;
 
-                    if (onOpenChat) {
-                      onOpenChat({
-                        sellerId: targetSellerId,
-                        productId: productId,
-                        sellerName: sellerName,
-                        productTitle: productTitle,
-                        price: priceText,
-                        image: imageUrl,
-                        avatar: avatar
-                      });
-                    }
-                  }}
-                  className="flex-1 py-3 rounded-2xl bg-[#1944F1] text-white font-semibold text-xs hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Chat Now</span>
-                </button>
+                      if (onOpenChat) {
+                        onOpenChat({
+                          sellerId: targetSellerId,
+                          productId: productId,
+                          sellerName: sellerName,
+                          productTitle: productTitle,
+                          price: priceText,
+                          image: imageUrl,
+                          avatar: avatar
+                        });
+                      }
+                    }}
+                    className="flex-1 py-3 rounded-2xl bg-[#1944F1] text-white font-semibold text-xs hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Chat Now</span>
+                  </button>
+                )}
               </div>
             </motion.div>
           </motion.div>

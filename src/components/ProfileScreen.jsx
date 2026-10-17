@@ -49,7 +49,7 @@ const ACADEMIC_YEAR_OPTIONS = [
 ];
 
 // Campus Buddy Profile Screen with default avatar and student info
-export default function ProfileScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], onNavigateBack, onLogout }) {
+export default function ProfileScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], onUpdateUser, onNavigateBack, onLogout }) {
   const [showWishlistModal, setShowWishlistModal] = useState(false);
   const [showDobCalendar, setShowDobCalendar] = useState(false);
   const [isYearDropdownOpen, setIsYearDropdownOpen] = useState(false);
@@ -83,6 +83,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
     dob: user?.dob || localStorage.getItem('user_dob') || '',
     course: user?.course || localStorage.getItem('user_course') || '',
     year: user?.year || localStorage.getItem('user_year') || '1st Year',
+    phone: user?.phone || localStorage.getItem('user_phone') || '',
     avatar: (user?.avatar && user.avatar !== '/avatar.svg' ? user.avatar : null) || localStorage.getItem('user_custom_avatar') || user?.avatar || null
   }));
 
@@ -94,6 +95,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
         dob: user?.dob || localStorage.getItem('user_dob') || '',
         course: user?.course || localStorage.getItem('user_course') || '',
         year: user?.year || localStorage.getItem('user_year') || '1st Year',
+        phone: user?.phone || localStorage.getItem('user_phone') || '',
         avatar: (user?.avatar && user.avatar !== '/avatar.svg' ? user.avatar : null) || localStorage.getItem('user_custom_avatar') || user?.avatar || null
       });
       if (user?.avatar && user.avatar !== '/avatar.svg') {
@@ -107,6 +109,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
   const [draftDob, setDraftDob] = useState(savedProfile.dob);
   const [draftCourse, setDraftCourse] = useState(savedProfile.course);
   const [draftYear, setDraftYear] = useState(savedProfile.year);
+  const [draftPhone, setDraftPhone] = useState(savedProfile.phone);
   const [draftAvatar, setDraftAvatar] = useState(savedProfile.avatar);
   const [profileSavedMessage, setProfileSavedMessage] = useState(false);
 
@@ -117,6 +120,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
       setDraftDob(savedProfile.dob);
       setDraftCourse(savedProfile.course);
       setDraftYear(savedProfile.year);
+      setDraftPhone(savedProfile.phone);
       setDraftAvatar(savedProfile.avatar);
       setShowDobCalendar(false);
       setIsYearDropdownOpen(false);
@@ -205,11 +209,18 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
 
   const handleProfileSave = async (e) => {
     e.preventDefault();
+    const phoneDigits = (draftPhone || '').replace(/\D/g, '');
+    if (!phoneDigits || phoneDigits.length !== 10) {
+      showToast("Phone number must have exactly 10 digits", "error");
+      return;
+    }
+
     try {
       const finalName = draftName.trim() || savedProfile.fullName;
       const finalDob = draftDob;
       const finalCourse = draftCourse;
       const finalYear = draftYear;
+      const finalPhone = phoneDigits;
       const finalAvatar = draftAvatar || savedProfile.avatar;
 
       // 1. Commit to localStorage
@@ -217,6 +228,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
       if (finalDob) localStorage.setItem('user_dob', finalDob);
       if (finalCourse) localStorage.setItem('user_course', finalCourse);
       if (finalYear) localStorage.setItem('user_year', finalYear);
+      if (finalPhone) localStorage.setItem('user_phone', finalPhone);
       if (finalAvatar) localStorage.setItem('user_custom_avatar', finalAvatar);
 
       // 2. Commit to savedProfile state (now the main screen updates!)
@@ -225,21 +237,24 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
         dob: finalDob,
         course: finalCourse,
         year: finalYear,
+        phone: finalPhone,
         avatar: finalAvatar
       });
 
       // 3. Persist to API
       const result = await apiUpdateProfile({
         fullName: finalName,
-        dob: finalDob,
-        course: finalCourse,
-        year: finalYear,
+        phone: finalPhone,
         ...(finalAvatar ? { avatar: finalAvatar } : {})
       });
 
       if (result?.user?.avatar) {
         setSavedProfile(prev => ({ ...prev, avatar: result.user.avatar }));
         localStorage.setItem('user_custom_avatar', result.user.avatar);
+      }
+
+      if (result?.user && onUpdateUser) {
+        onUpdateUser(result.user);
       }
 
       setProfileSavedMessage(true);
@@ -727,6 +742,22 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                           />
                         </div>
                       )}
+                    </div>
+
+                    {/* Editable: Phone Number */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700">Phone Number</label>
+                      <div className="relative">
+                        <Smartphone className="w-4 h-4 text-slate-400 absolute left-4 top-3.5 z-10 pointer-events-none" />
+                        <input
+                          type="tel"
+                          value={draftPhone}
+                          maxLength={10}
+                          onChange={(e) => setDraftPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                          placeholder="10-digit Phone Number (e.g. 9876543210)"
+                          className="w-full pl-11 pr-4 py-3 bg-[#F3F4F6] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all"
+                        />
+                      </div>
                     </div>
 
                     {/* Editable: Course / Major */}

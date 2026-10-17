@@ -25,13 +25,32 @@ export default function WishlistScreen({
   onOpenChat
 }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const isProductInUserUniversity = (product, userUni = user?.universityName) => {
+    if (!userUni || !userUni.trim()) return true;
+    if (!product) return false;
+    const target = userUni.toLowerCase().trim();
+    const prodCampus = (product.campusName || '').toLowerCase().trim();
+    const prodUni = (product.universityName || '').toLowerCase().trim();
+    const sellerUni = (product.seller?.universityName || '').toLowerCase().trim();
+
+    return (
+      (prodCampus && (prodCampus.includes(target) || target.includes(prodCampus))) ||
+      (prodUni && (prodUni.includes(target) || target.includes(prodUni))) ||
+      (sellerUni && (sellerUni.includes(target) || target.includes(sellerUni)))
+    );
+  };
+
   const [dbProducts, setDbProducts] = useState(() => {
     try {
       const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
       const userCached = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
       const map = new Map();
-      cached.forEach(p => map.set(String(p._id || p.id), p));
-      userCached.forEach(p => map.set(String(p._id || p.id), p));
+      cached.forEach(p => {
+        if (p && isProductInUserUniversity(p)) map.set(String(p._id || p.id), p);
+      });
+      userCached.forEach(p => {
+        if (p && isProductInUserUniversity(p)) map.set(String(p._id || p.id), p);
+      });
       return Array.from(map.values());
     } catch {
       return [];
@@ -46,14 +65,11 @@ export default function WishlistScreen({
     const load = async () => {
       try {
         setLoading(true);
+        setDbProducts([]);
         const data = await fetchProducts(user?.universityName || '');
         if (isMounted && Array.isArray(data)) {
-          setDbProducts(prev => {
-            const map = new Map();
-            prev.forEach(p => map.set(String(p._id || p.id), p));
-            data.forEach(p => map.set(String(p._id || p.id), p));
-            return Array.from(map.values());
-          });
+          const strictlyFiltered = data.filter(p => p && isProductInUserUniversity(p));
+          setDbProducts(strictlyFiltered);
         }
       } catch (e) {
         console.warn('WishlistScreen: could not fetch products from server', e);

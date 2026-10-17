@@ -3,6 +3,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cloudinary = require('cloudinary').v2;
 const User = require('../models/User');
+const Product = require('../models/Product');
+const cacheService = require('../cache/cacheService');
 const emailService = require('../services/emailService');
 
 // Configure Cloudinary explicitly from environment
@@ -30,11 +32,9 @@ const formatUser = (user) => ({
   _id: user._id,
   fullName: user.fullName,
   email: user.email,
+  phone: user.phone || '',
   universityName: user.universityName || 'Campus Member',
   avatar: user.avatar || '/avatar.svg',
-  dob: user.dob || '',
-  course: user.course || '',
-  year: user.year || '1st Year',
   studentIdUrl: user.studentIdUrl || '',
   isVerified: Boolean(user.isVerified),
   createdAt: user.createdAt,
@@ -51,6 +51,11 @@ async function signup(req, res, next) {
       fullName,
       email,
       password,
+      phone,
+      phoneNumber,
+      dob,
+      course,
+      year,
       universityName,
       studentIdUrl,
       isVerified,
@@ -74,6 +79,11 @@ async function signup(req, res, next) {
       return res.status(400).json({ error: 'Password must be between 8 and 128 characters' });
     }
 
+    const rawPhone = (phone || phoneNumber || '').toString().replace(/\D/g, '');
+    if (!rawPhone || rawPhone.length !== 10) {
+      return res.status(400).json({ error: 'Phone number must have exactly 10 digits' });
+    }
+
     // Check if user already exists in MongoDB
     const existingUser = await User.findOne({ email: String(resolvedEmail) }).select('_id').lean();
     if (existingUser) {
@@ -89,6 +99,7 @@ async function signup(req, res, next) {
       fullName: resolvedName,
       email: resolvedEmail,
       password: hashedPassword,
+      phone: rawPhone,
       universityName: typeof universityName === 'string' ? universityName.trim().slice(0, 100) : 'Campus Member',
       studentIdUrl: typeof studentIdUrl === 'string' ? studentIdUrl.trim() : '',
       isVerified: Boolean(isVerified),
@@ -184,7 +195,7 @@ async function getMe(req, res, next) {
 async function updateUniversity(req, res, next) {
   try {
     const userId = req.user.id || (req.auth && req.auth.userId);
-    const { universityName, fullName, name, isVerified, studentIdUrl, avatar, dob, course, year } = req.body;
+    const { universityName, fullName, name, isVerified, studentIdUrl, avatar, dob, course, year, phone, phoneNumber } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -194,9 +205,18 @@ async function updateUniversity(req, res, next) {
     // University name is locked once verified and cannot be edited
     if (universityName && !user.universityName) user.universityName = universityName;
     if (fullName || name) user.fullName = fullName || name;
-    if (dob !== undefined) user.dob = dob;
-    if (course !== undefined) user.course = course;
-    if (year !== undefined) user.year = year;
+    let phoneChanged = false;
+    let targetPhone = '';
+    if (phone !== undefined || phoneNumber !== undefined) {
+      targetPhone = (phone !== undefined ? phone : phoneNumber).toString().replace(/\D/g, '');
+      if (targetPhone.length !== 10) {
+        return res.status(400).json({ error: 'Phone number must have exactly 10 digits' });
+      }
+      if (user.phone !== targetPhone) {
+        phoneChanged = true;
+      }
+      user.phone = targetPhone;
+    }
     if (studentIdUrl) user.studentIdUrl = studentIdUrl;
     if (isVerified !== undefined) user.isVerified = Boolean(isVerified);
 
@@ -219,6 +239,35 @@ async function updateUniversity(req, res, next) {
     }
 
     await user.save();
+
+    // If phone number or full name was updated, synchronize all existing ads in MongoDB for this student
+    if (phoneChanged || fullName || name) {
+      const updateFields = {};
+      if (targetPhone) {
+        updateFields.phone = targetPhone;
+        updateFields.contactNumber = targetPhone;
+      }
+
+      if (Object.keys(updateFields).length > 0) {
+        await Product.updateMany(
+          { seller: userId },
+          { $set: updateFields }
+        );
+      }
+
+      // Invalidate product caches for this user's ads so buyers see the updated number immediately
+      try {
+        const userProducts = await Product.find({ seller: userId }).select('_id').lean();
+        userProducts.forEach(p => {
+          cacheService.del(`product_detail:${p._id}`);
+        });
+        cacheService.invalidatePattern('products:');
+        cacheService.invalidatePattern('marketplace:');
+        cacheService.invalidatePattern(`user_ads:${userId}`);
+      } catch (cacheErr) {
+        console.warn('[authController] Cache invalidation warning:', cacheErr.message);
+      }
+    }
 
     res.json({
       success: true,

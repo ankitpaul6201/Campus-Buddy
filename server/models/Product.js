@@ -43,6 +43,14 @@ const productSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  phone: {
+    type: String,
+    default: ''
+  },
+  contactNumber: {
+    type: String,
+    default: ''
+  },
   status: {
     type: String,
     enum: ['active', 'sold', 'archived'],

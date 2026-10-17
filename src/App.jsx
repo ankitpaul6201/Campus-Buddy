@@ -299,6 +299,14 @@ export default function App() {
   };
 
   const handleLoginSuccess = (user) => {
+    // Clear product cache on account switch so products from previous college never bleed through
+    try {
+      localStorage.removeItem('campus_products_cache');
+      localStorage.removeItem('campus_user_ads');
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('campus_products_cache')) localStorage.removeItem(key);
+      });
+    } catch {}
     setCurrentUser(user);
     setUserAds([]); // Clear previous user's ads immediately
     setCurrentScreen('main');
@@ -557,6 +565,17 @@ export default function App() {
                 favorites={favorites}
                 notifications={notifications}
                 userAds={userAds}
+                onUpdateUser={(updated) => {
+                  setCurrentUser(prev => ({ ...prev, ...updated }));
+                  if (updated.phone) {
+                    setUserAds(prev => (prev || []).map(ad => ({
+                      ...ad,
+                      phone: updated.phone,
+                      contactNumber: updated.phone,
+                      seller: typeof ad.seller === 'object' ? { ...ad.seller, phone: updated.phone } : ad.seller
+                    })));
+                  }
+                }}
                 onNavigateBack={() => setActiveNav('home')} 
                 onLogout={handleLogout}
               />

@@ -26,13 +26,41 @@ import { fetchProducts, formatRupeePrice, updateAdLikes, incrementAdViews, getOp
 export default function HomeScreen({ user, activeNav, setActiveNav, favorites, setFavorites, notifications = [], userAds = [], onOpenChat, onNavigate, onSelectProduct, onInitialLoadComplete }) {
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const userUniversity = user?.universityName || user?.university?.name || '';
+
+  // Helper: Strictly verify an item belongs to the active student's campus
+  const isProductInUserUniversity = (product, userUni = userUniversity) => {
+    if (!userUni || !userUni.trim()) return true;
+    if (!product) return false;
+    const target = userUni.toLowerCase().trim();
+    const prodCampus = (product.campusName || '').toLowerCase().trim();
+    const prodUni = (product.universityName || '').toLowerCase().trim();
+    const sellerUni = (product.seller?.universityName || '').toLowerCase().trim();
+
+    return (
+      (prodCampus && (prodCampus.includes(target) || target.includes(prodCampus))) ||
+      (prodUni && (prodUni.includes(target) || target.includes(prodUni))) ||
+      (sellerUni && (sellerUni.includes(target) || target.includes(sellerUni)))
+    );
+  };
+
   const [dbProducts, setDbProducts] = useState(() => {
     try {
       const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
       const userCached = JSON.parse(localStorage.getItem('campus_user_ads') || '[]');
       const map = new Map();
-      cached.forEach(p => map.set(String(p._id || p.id), p));
-      userCached.forEach(p => map.set(String(p._id || p.id), p));
+      const uni = user?.universityName || user?.university?.name || '';
+      cached.forEach(p => {
+        if (p && isProductInUserUniversity(p, uni)) {
+          map.set(String(p._id || p.id), p);
+        }
+      });
+      userCached.forEach(p => {
+        if (p && isProductInUserUniversity(p, uni)) {
+          map.set(String(p._id || p.id), p);
+        }
+      });
       return Array.from(map.values());
     } catch {
       return [];
@@ -55,30 +83,19 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
   const [draftCondition, setDraftCondition] = useState('all');
   const [draftCategory, setDraftCategory] = useState('all');
 
-  const userUniversity = user?.universityName || user?.university?.name || '';
-
   useEffect(() => {
     let isMounted = true;
     const loadProducts = async () => {
       try {
         setLoadingProducts(true);
+        // Clear previous university products immediately on campus change
+        setDbProducts([]);
         const data = await fetchProducts(userUniversity);
         if (isMounted) {
-          setDbProducts(prev => {
-            const map = new Map();
-            (prev || []).forEach(p => p && (p._id || p.id) && map.set(String(p._id || p.id), p));
-            try {
-              const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
-              if (Array.isArray(cached)) {
-                cached.forEach(p => p && (p._id || p.id) && map.set(String(p._id || p.id), p));
-              }
-            } catch {}
-            (userAds || []).forEach(a => a && (a._id || a.id) && map.set(String(a._id || a.id), a));
-            if (Array.isArray(data)) {
-              data.forEach(p => p && (p._id || p.id) && map.set(String(p._id || p.id), p));
-            }
-            return Array.from(map.values());
-          });
+          const strictlyFiltered = Array.isArray(data)
+            ? data.filter(p => p && isProductInUserUniversity(p, userUniversity))
+            : [];
+          setDbProducts(strictlyFiltered);
         }
       } catch (err) {
         console.warn('Could not fetch products:', err);
@@ -157,30 +174,21 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
     setSearchQuery('');
   };
 
-  // Merge dbProducts and userAds dynamically, deduplicating by ID with userAds precedence
+  // Merge dbProducts and userAds dynamically, strictly scoped to the active user's university
   const baseProducts = React.useMemo(() => {
     const map = new Map();
-    // 1. Populate from local product cache first so local listings are immediately visible
-    try {
-      const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
-      if (Array.isArray(cached)) {
-        cached.forEach(p => {
-          if (p && (p._id || p.id)) map.set(String(p._id || p.id), p);
-        });
-      }
-    } catch {}
 
-    // 2. Overlay database products
+    // 1. Overlay database products that belong strictly to current university
     (dbProducts || []).forEach(p => {
-      if (p && (p._id || p.id)) {
+      if (p && (p._id || p.id) && isProductInUserUniversity(p, userUniversity)) {
         const id = String(p._id || p.id);
         map.set(id, p);
       }
     });
 
-    // 3. Overlay user ads (which contain latest user actions and optimistic status changes)
+    // 2. Overlay user ads ONLY if they belong to current university
     (userAds || []).forEach(ad => {
-      if (ad && (ad._id || ad.id)) {
+      if (ad && (ad._id || ad.id) && isProductInUserUniversity(ad, userUniversity)) {
         const id = String(ad._id || ad.id);
         const existing = map.get(id) || {};
         map.set(id, {
@@ -205,15 +213,21 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
       });
     } catch {}
 
-    // Only active listings should appear on the home screen
+    // Only active listings from the current user's university should appear
     return Array.from(map.values()).filter(p => {
       const id = String(p._id || p.id);
       if (locallySoldIds.has(id)) return false;
+      if (!isProductInUserUniversity(p, userUniversity)) return false;
       return (p.status || 'active') === 'active';
     });
-  }, [userAds, dbProducts, user?.fullName]);
+  }, [userAds, dbProducts, user?.fullName, userUniversity]);
 
   const filteredProducts = baseProducts.filter(item => {
+    // 0. Strict Campus boundary filter
+    if (!isProductInUserUniversity(item, userUniversity)) {
+      return false;
+    }
+
     // 1. Search Query filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
