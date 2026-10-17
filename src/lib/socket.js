@@ -144,3 +144,23 @@ export function sendTypingStatus(conversationId, isTyping) {
     socket.emit('conversation:typing', { conversationId, isTyping });
   }
 }
+
+/**
+ * Emit conversation read event so other participants see real-time green read ticks
+ */
+export function markConversationRead(conversationId) {
+  if (socket && conversationId) {
+    socket.emit('conversation:read', { conversationId });
+  }
+}
+
+/**
+ * Listen for when messages in an active conversation are marked as read
+ */
+export function subscribeToMessagesRead(handler) {
+  if (!socket) return () => {};
+  socket.on('chat:messages_read', handler);
+  return () => {
+    if (socket) socket.off('chat:messages_read', handler);
+  };
+}

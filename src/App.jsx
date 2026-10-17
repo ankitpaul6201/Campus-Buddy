@@ -277,6 +277,10 @@ export default function App() {
     setUserAds([]);
     setNotifications([]);
     setFavorites([]);
+    setActiveNav('home');
+    setPreviousNav('home');
+    setSelectedProduct(null);
+    setSelectedSeller(null);
     try {
       localStorage.removeItem('campus_favorites');
     } catch {}
@@ -296,6 +300,10 @@ export default function App() {
     setCurrentUser(user);
     setUserAds([]); // Clear previous user's ads immediately
     setFavorites(getStoredFavorites(user)); // Load strictly this user's wishlist
+    setActiveNav('home'); // Always redirect directly to Home marketplace upon login
+    setPreviousNav('home');
+    setSelectedProduct(null);
+    setSelectedSeller(null);
     setCurrentScreen('main');
     initSocketClient(getAuthToken());
     fetchNotifications().then(res => {

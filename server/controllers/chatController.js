@@ -165,6 +165,10 @@ async function getMessages(req, res, next) {
 
     if (modified) {
       await conversation.save();
+      emitToConversation(conversation._id, 'chat:messages_read', {
+        conversationId: conversation._id,
+        readBy: userId
+      });
     }
 
     res.json(conversation.messages);

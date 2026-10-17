@@ -19,8 +19,10 @@ import {
 } from '../lib/api';
 import { 
   subscribeToChatMessages, 
+  subscribeToMessagesRead,
   joinConversationRoom, 
-  leaveConversationRoom 
+  leaveConversationRoom,
+  markConversationRead 
 } from '../lib/socket';
 
 export default function ChatScreen({ 
@@ -153,6 +155,7 @@ export default function ChatScreen({
         });
 
         setSelectedChatId(targetId);
+        markConversationRead(targetId);
 
         // Load messages
         const msgs = await fetchMessages(targetId);
@@ -163,7 +166,7 @@ export default function ChatScreen({
             text: m.text,
             sender: String(m.sender?._id || m.sender) === currentUserIdStr ? 'me' : 'other',
             time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
-            read: m.read ?? true
+            read: Boolean(m.read)
           })));
         }
       } catch (err) {
@@ -185,6 +188,7 @@ export default function ChatScreen({
 
   const handleSelectChat = async (chatId) => {
     setSelectedChatId(chatId);
+    markConversationRead(chatId);
     try {
       setLoadingMessages(true);
       const msgs = await fetchMessages(chatId);
@@ -195,7 +199,7 @@ export default function ChatScreen({
           text: m.text,
           sender: String(m.sender?._id || m.sender) === currentUserIdStr ? 'me' : 'other',
           time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
-          read: m.read ?? true
+          read: Boolean(m.read)
         })));
       } else {
         setMessages([]);
@@ -213,13 +217,15 @@ export default function ChatScreen({
     if (!selectedChatId) return;
 
     joinConversationRoom(selectedChatId);
+    markConversationRead(selectedChatId);
 
-    const unsub = subscribeToChatMessages(({ conversationId, message }) => {
+    const unsubMsg = subscribeToChatMessages(({ conversationId, message }) => {
       if (String(conversationId) === String(selectedChatId) && message) {
         const currentUserIdStr = String(currentUserId || 'me');
         const isMine = String(message.sender?._id || message.sender) === currentUserIdStr;
 
         if (!isMine) {
+          markConversationRead(selectedChatId);
           setMessages(prev => {
             const exists = prev.some(m => String(m.id) === String(message._id || message.id));
             if (exists) return prev;
@@ -249,9 +255,17 @@ export default function ChatScreen({
       }
     });
 
+    // Real-time listener: when the other user views/opens the conversation, mark our sent messages as read (green ticks)
+    const unsubRead = subscribeToMessagesRead(({ conversationId }) => {
+      if (String(conversationId) === String(selectedChatId)) {
+        setMessages(prev => prev.map(m => m.sender === 'me' ? { ...m, read: true } : m));
+      }
+    });
+
     return () => {
       leaveConversationRoom(selectedChatId);
-      unsub();
+      unsubMsg();
+      unsubRead();
     };
   }, [selectedChatId, currentUserId]);
 
@@ -266,7 +280,7 @@ export default function ChatScreen({
       text: trimmed,
       sender: 'me',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      read: true
+      read: false // Unread until the other user views the chat
     };
 
     setMessages(prev => [...prev, newMsg]);
@@ -304,7 +318,7 @@ export default function ChatScreen({
       className="w-full h-full min-h-screen bg-[#F4F6FB] text-slate-900 flex flex-col justify-between overflow-hidden font-sans select-none relative"
     >
       {/* Main Container */}
-      <div className="flex-1 flex flex-col overflow-hidden pb-16">
+      <div className="flex-1 flex flex-col overflow-hidden pb-[68px]">
         
         {/* TOP HEADER BAR */}
         <div className="pt-14 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
@@ -451,7 +465,13 @@ export default function ChatScreen({
                         <span className="text-[9px] text-slate-400">
                           {msg.time}
                         </span>
-                        {isMe && <CheckCheck className="w-3 h-3 text-[#1944F1]" />}
+                        {isMe && (
+                          <CheckCheck 
+                            className={`w-3.5 h-3.5 transition-colors duration-200 ${
+                              msg.read ? 'text-emerald-500' : 'text-slate-400'
+                            }`} 
+                          />
+                        )}
                       </div>
                     </div>
                   );
@@ -471,8 +491,8 @@ export default function ChatScreen({
                 ))}
               </div>
 
-              {/* Message Input Box */}
-              <div className="p-2.5 bg-white border-t border-slate-100 flex items-center gap-2 shrink-0">
+              {/* Message Input Box - raised 3px to avoid interference with bottom navigation panel */}
+              <div className="p-2.5 mb-[3px] bg-white border-t border-slate-100 flex items-center gap-2 shrink-0">
                 <input 
                   type="text"
                   value={inputText}

@@ -85,6 +85,37 @@ function initSocket(httpServer) {
       }
     });
 
+    // Handle read receipt broadcast when user views/opens messages
+    socket.on('conversation:read', async ({ conversationId }) => {
+      if (conversationId) {
+        try {
+          const Conversation = require('../models/Conversation');
+          const conversation = await Conversation.findOne({
+            _id: conversationId,
+            participants: userId
+          });
+          if (conversation) {
+            let modified = false;
+            conversation.messages.forEach(msg => {
+              if (String(msg.sender) !== String(userId) && !msg.read) {
+                msg.read = true;
+                modified = true;
+              }
+            });
+            if (modified) {
+              await conversation.save();
+              emitToConversation(conversationId, 'chat:messages_read', {
+                conversationId,
+                readBy: userId
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('Socket conversation:read error:', err.message);
+        }
+      }
+    });
+
     // Handle typing status broadcast in conversation
     socket.on('conversation:typing', ({ conversationId, isTyping }) => {
       if (conversationId) {
