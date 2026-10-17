@@ -25,6 +25,7 @@ import {
   leaveConversationRoom,
   markConversationRead 
 } from '../lib/socket';
+import { Skeleton } from './ui/skeleton';
 
 export default function ChatScreen({ 
   user, 
@@ -482,8 +483,32 @@ export default function ChatScreen({
                 </div>
 
                 {loadingMessages && (
-                  <div className="text-center py-4 text-xs text-slate-400">
-                    Loading messages...
+                  <div className="space-y-3 py-2">
+                    {/* Left bubble skeleton */}
+                    <div className="flex items-start gap-2 max-w-[75%]">
+                      <Skeleton height={28} width={28} rounded className="shrink-0 mt-1" />
+                      <div className="bg-white rounded-2xl rounded-tl-xs p-3 border border-slate-100 space-y-1.5 w-48 shadow-2xs">
+                        <Skeleton height={12} width="90%" />
+                        <Skeleton height={12} width="60%" />
+                      </div>
+                    </div>
+
+                    {/* Right bubble skeleton */}
+                    <div className="flex justify-end">
+                      <div className="bg-blue-50/70 rounded-2xl rounded-tr-xs p-3 border border-blue-100/60 space-y-1.5 w-40 shadow-2xs">
+                        <Skeleton height={12} width="80%" />
+                        <Skeleton height={12} width="50%" />
+                      </div>
+                    </div>
+
+                    {/* Left bubble skeleton */}
+                    <div className="flex items-start gap-2 max-w-[75%]">
+                      <Skeleton height={28} width={28} rounded className="shrink-0 mt-1" />
+                      <div className="bg-white rounded-2xl rounded-tl-xs p-3 border border-slate-100 space-y-1.5 w-56 shadow-2xs">
+                        <Skeleton height={12} width="95%" />
+                        <Skeleton height={12} width="70%" />
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -585,8 +610,26 @@ export default function ChatScreen({
               {/* Inbox Cards */}
               <div className="space-y-2.5 pt-1">
                 {loadingChats ? (
-                  <div className="py-12 text-center text-xs text-slate-400">
-                    Loading conversations...
+                  <div className="space-y-2.5">
+                    {[1, 2, 3, 4].map(idx => (
+                      <div
+                        key={idx}
+                        className="bg-white rounded-2xl p-3.5 border border-slate-100 shadow-xs flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <Skeleton height={44} width={44} rounded className="shrink-0" />
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <Skeleton height={13} width="45%" />
+                            <Skeleton height={16} width={80} pill />
+                            <Skeleton height={11} width="80%" />
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                          <Skeleton height={10} width={40} />
+                          <Skeleton height={16} width={16} rounded />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : filteredChats.length === 0 ? (
                   <div className="py-16 text-center space-y-2 bg-white rounded-3xl p-6 border border-slate-100 shadow-2xs">

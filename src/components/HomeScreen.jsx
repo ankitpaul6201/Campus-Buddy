@@ -22,6 +22,7 @@ import MyAdsScreen from './MyAdsScreen';
 import ProfileScreen from './ProfileScreen';
 import WishlistScreen from './WishlistScreen';
 import { fetchProducts, formatRupeePrice, updateAdLikes, incrementAdViews, getOptimizedImageUrl } from '../lib/api';
+import { Skeleton } from './ui/skeleton';
 
 export default function HomeScreen({ user, activeNav, setActiveNav, favorites, setFavorites, notifications = [], userAds = [], onOpenChat, onNavigate, onSelectProduct, onInitialLoadComplete }) {
   const [activeTab, setActiveTab] = useState('all');
@@ -550,8 +551,25 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
 
         {/* Dynamic Product Grid / Clean Empty State */}
         {loadingProducts ? (
-          <div className="py-12 text-center text-xs text-slate-400 font-medium">
-            Loading campus listings...
+          <div className="grid grid-cols-2 gap-3 w-full">
+            {[1, 2, 3, 4, 5, 6].map((idx) => (
+              <div
+                key={idx}
+                className="bg-[#F5F3F3] rounded-3xl p-2.5 border border-slate-100 shadow-xs flex flex-col justify-between space-y-2.5 w-full text-left"
+              >
+                <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-slate-200/60">
+                  <Skeleton className="w-full h-full rounded-2xl" height="100%" />
+                </div>
+                <div className="space-y-1.5 px-1 pb-1">
+                  <Skeleton height={14} width="80%" />
+                  <Skeleton height={18} width="50%" />
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <Skeleton height={18} width={18} rounded />
+                    <Skeleton height={11} width="60%" />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : filteredProducts.length === 0 ? (
           baseProducts.length === 0 ? (

@@ -130,9 +130,6 @@ export default function NotificationsScreen({
 
   const filteredNotifications = processedNotifications.filter(n => {
     if (activeFilter === 'unread') return n.isUnread;
-    if (activeFilter === 'marketplace') return n.category === 'Marketplace';
-    if (activeFilter === 'system') return n.category === 'System';
-    if (activeFilter === 'chat') return n.category === 'Chat';
     return true;
   });
 
@@ -147,26 +144,26 @@ export default function NotificationsScreen({
       className="w-full h-full bg-white text-slate-900 flex flex-col justify-between overflow-hidden font-sans select-none relative"
     >
       {/* Scrollable Main Content */}
-      <div className="flex-1 overflow-y-auto pb-28 space-y-5 bg-white">
+      <div className="flex-1 overflow-y-auto pb-28 space-y-4 bg-white">
         
         {/* 1. Header Bar: Left Back Button + Logo + Title */}
-        <div className="pt-12 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-30">
+        <div className="pt-12 pb-3 px-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-30">
           <div className="flex items-center gap-3">
             <button
               onClick={() => onNavigateBack ? onNavigateBack() : (setActiveNav && setActiveNav('home'))}
-              className="w-11 h-11 min-w-[44px] max-w-[44px] min-h-[44px] max-h-[44px] rounded-full bg-[#F5F3F3] hover:bg-slate-200/60 border border-slate-100 flex items-center justify-center text-slate-900 transition-all duration-200 hover:-translate-x-1 active:-translate-x-1.5 active:scale-95 shrink-0 group"
+              className="w-10 h-10 min-w-[40px] max-w-[40px] min-h-[40px] max-h-[40px] rounded-full bg-[#F5F3F3] hover:bg-slate-200/60 border border-slate-100 flex items-center justify-center text-slate-900 transition-all duration-200 hover:-translate-x-1 active:-translate-x-1.5 active:scale-95 shrink-0 group"
               title="Back"
             >
-              <ArrowLeft className="w-5.5 h-5.5 transition-transform duration-200 group-hover:-translate-x-0.5 group-active:-translate-x-1" />
+              <ArrowLeft className="w-5 h-5 transition-transform duration-200 group-hover:-translate-x-0.5 group-active:-translate-x-1" />
             </button>
-            <div className="w-9 h-9 rounded-lg shrink-0 overflow-hidden">
+            <div className="w-8.5 h-8.5 rounded-lg shrink-0 overflow-hidden">
               <img 
                 src="/campus-buddy-CB-exact-vector (1).svg" 
                 alt="Campus Buddy" 
                 className="w-full h-full object-contain" 
               />
             </div>
-            <span className="text-lg font-bold text-slate-900 font-sans tracking-tight">
+            <span className="text-base font-bold text-slate-900 font-sans tracking-tight">
               Campus Buddy
             </span>
           </div>
@@ -175,10 +172,10 @@ export default function NotificationsScreen({
           <div className="flex items-center gap-2">
             <button 
               onClick={() => setActiveNav && setActiveNav('wishlist')}
-              className="w-10 h-10 min-w-[40px] max-w-[40px] min-h-[40px] max-h-[40px] rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-900 shadow-xs hover:bg-slate-200/60 transition-colors relative shrink-0"
+              className="w-9.5 h-9.5 min-w-[38px] max-w-[38px] min-h-[38px] max-h-[38px] rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-900 shadow-xs hover:bg-slate-200/60 transition-colors relative shrink-0"
               title="My Wishlist"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" className="transition-all duration-200">
+              <svg width="18" height="18" viewBox="0 0 24 24" className="transition-all duration-200">
                 <path d={uploadedHeartPath} fill="none" stroke="#0F172A" strokeWidth="1.8" />
               </svg>
             </button>
@@ -186,15 +183,15 @@ export default function NotificationsScreen({
         </div>
 
         {/* 2. Content Padding Wrapper */}
-        <div className="px-5 space-y-4">
+        <div className="px-4 space-y-3">
           
           {/* Page Title & Clear All / Mark Read Actions */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 font-sans tracking-tight">
+              <h1 className="text-xl font-bold text-slate-900 font-sans tracking-tight">
                 Notifications
               </h1>
-              <p className="text-xs text-slate-500 font-normal mt-0.5 leading-snug">
+              <p className="text-[11px] text-slate-500 font-normal mt-0.5 leading-snug">
                 Stay updated on campus deals, chats, and alerts in real time.
               </p>
             </div>
@@ -203,10 +200,10 @@ export default function NotificationsScreen({
               {unreadCount > 0 && (
                 <button
                   onClick={markAllAsRead}
-                  className="text-xs font-semibold text-[#1944F1] hover:bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full transition-colors shrink-0 flex items-center gap-1"
+                  className="text-[11px] font-semibold text-[#1944F1] hover:bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full transition-colors shrink-0 flex items-center gap-1"
                   title="Mark all as read"
                 >
-                  <CheckCheck className="w-3.5 h-3.5" />
+                  <CheckCheck className="w-3 h-3" />
                   <span className="hidden sm:inline">Mark Read</span>
                 </button>
               )}
@@ -214,7 +211,7 @@ export default function NotificationsScreen({
               {notifications.length > 0 && (
                 <button
                   onClick={clearAllNotifications}
-                  className="text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-full transition-colors shrink-0"
+                  className="text-[11px] font-semibold text-rose-600 hover:bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-full transition-colors shrink-0"
                 >
                   Clear All
                 </button>
@@ -222,20 +219,18 @@ export default function NotificationsScreen({
             </div>
           </div>
 
-          {/* Filter Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+          {/* Filter Tabs (Only All and Unread) */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
             {[
               { id: 'all', label: `All (${notifications.length})` },
-              { id: 'unread', label: `Unread (${unreadCount})` },
-              { id: 'marketplace', label: 'Marketplace' },
-              { id: 'chat', label: 'Chats' }
+              { id: 'unread', label: `Unread (${unreadCount})` }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveFilter(tab.id)}
-                className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
                   activeFilter === tab.id
-                    ? 'bg-[#1944F1] text-white shadow-sm'
+                    ? 'bg-[#1944F1] text-white shadow-xs'
                     : 'bg-[#F5F3F3] text-slate-700 font-medium hover:bg-slate-200/50'
                 }`}
               >
@@ -247,7 +242,7 @@ export default function NotificationsScreen({
           {/* Notifications List */}
           <AnimatePresence mode="popLayout">
             {filteredNotifications.length > 0 ? (
-              <div className="space-y-3 pt-1">
+              <div className="space-y-2 pt-0.5">
                 {filteredNotifications.map((n) => {
                   const notifId = n._id || n.id;
                   const Icon = n.icon;
@@ -263,71 +258,71 @@ export default function NotificationsScreen({
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
                       onClick={() => handleNotificationClick(n)}
-                      className={`p-4 rounded-3xl border transition-all cursor-pointer flex gap-3.5 relative group ${
+                      className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center gap-3 relative group ${
                         n.isUnread 
-                          ? 'bg-[#EEF2FF]/60 border-blue-200 shadow-xs' 
-                          : 'bg-[#F5F3F3] border-slate-100/90 hover:shadow-md'
+                          ? 'bg-[#EEF2FF]/60 border-blue-200 shadow-2xs' 
+                          : 'bg-[#F5F3F3] border-slate-100/90 hover:shadow-xs'
                       }`}
                     >
-                      {/* Left Icon / Avatar */}
-                      <div className="relative shrink-0">
+                      {/* Left Sender Avatar (Clean, no sub-badge) */}
+                      <div className="relative shrink-0 self-center">
                         {senderAvatar && !['/avatar.svg', '/avatar-blue.svg'].includes(senderAvatar) ? (
-                          <div className="w-10 h-10 rounded-2xl overflow-hidden border border-slate-200">
+                          <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200/80">
                             <img src={senderAvatar} alt={senderName} className="w-full h-full object-cover" />
                           </div>
                         ) : (
-                          <div className={`w-10 h-10 rounded-2xl ${n.iconBg} flex items-center justify-center shrink-0 shadow-2xs`}>
-                            <Icon className="w-5 h-5" />
+                          <div className={`w-9 h-9 rounded-xl ${n.iconBg} flex items-center justify-center shrink-0 shadow-2xs`}>
+                            <Icon className="w-4 h-4" />
                           </div>
                         )}
-                        {/* Sub badge icon */}
-                        <div className={`w-4 h-4 rounded-full ${n.iconBg} absolute -bottom-1 -right-1 flex items-center justify-center ring-2 ring-white`}>
-                          <Icon className="w-2.5 h-2.5" />
-                        </div>
                       </div>
 
                       {/* Content */}
-                      <div className="flex-1 min-w-0 pr-6">
-                        <div className="flex items-start justify-between gap-1">
-                          <h3 className="text-xs font-bold text-slate-900 font-sans leading-snug">
-                            {n.title}
-                          </h3>
-                        </div>
+                      <div className="flex-1 min-w-0 pr-2">
+                        <h3 className="text-xs font-bold text-slate-900 font-sans leading-snug truncate">
+                          {n.title}
+                        </h3>
 
-                        <p className="text-xs text-slate-600 font-normal leading-relaxed mt-1 line-clamp-2">
+                        <p className="text-[11px] text-slate-600 font-normal leading-snug mt-0.5 line-clamp-2">
                           {n.message}
                         </p>
 
-                        <div className="flex items-center gap-2 mt-2">
+                        <div className="mt-1">
                           <span className="text-[10px] text-slate-400 font-medium">
                             {n.timeStr}
-                          </span>
-                          <span className="text-[10px] text-slate-300">·</span>
-                          <span className="text-[10px] font-semibold text-[#1944F1]">
-                            {n.category}
                           </span>
                         </div>
                       </div>
 
-                      {/* Optional Right Product Thumbnail */}
-                      {productImage && (
-                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-slate-200/80 shrink-0 self-center">
-                          <img src={productImage} alt="Product" className="w-full h-full object-cover" />
+                      {/* Right Product Thumbnail with Action Icon on bottom-right */}
+                      {productImage ? (
+                        <div className="relative shrink-0 self-center">
+                          <div className="w-11 h-11 rounded-xl overflow-hidden bg-white border border-slate-200/80 shadow-2xs">
+                            <img src={productImage} alt="Product" className="w-full h-full object-cover" />
+                          </div>
+                          {/* Action Icon Badge on Bottom-Right of Product Image */}
+                          <div className={`w-4.5 h-4.5 rounded-full ${n.iconBg} absolute -bottom-1 -right-1 flex items-center justify-center ring-2 ring-white shadow-2xs`}>
+                            <Icon className="w-2.5 h-2.5" />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className={`w-8 h-8 rounded-xl ${n.iconBg} flex items-center justify-center shrink-0 self-center shadow-2xs`}>
+                          <Icon className="w-4 h-4" />
                         </div>
                       )}
 
                       {/* Right Delete Button */}
                       <button
                         onClick={(e) => deleteNotification(notifId, e)}
-                        className="w-7 h-7 rounded-full bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center shrink-0 border border-slate-200/60 transition-colors absolute top-3.5 right-3.5 opacity-0 group-hover:opacity-100"
+                        className="w-6 h-6 rounded-full bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center shrink-0 border border-slate-200/60 transition-colors absolute top-2 right-2 opacity-0 group-hover:opacity-100"
                         title="Delete notification"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3 h-3" />
                       </button>
 
                       {/* Unread Indicator Dot */}
                       {n.isUnread && (
-                        <span className="absolute top-4 right-4 w-2.5 h-2.5 rounded-full bg-[#1944F1] ring-2 ring-white" />
+                        <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#1944F1] ring-2 ring-white" />
                       )}
                     </motion.div>
                   );
