@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -29,6 +29,7 @@ export default function NotificationsScreen({
   onSelectProduct
 }) {
   const [activeFilter, setActiveFilter] = useState('all');
+  const isDraggingRef = useRef(false);
 
   const uploadedHeartPath = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z";
 
@@ -43,20 +44,17 @@ export default function NotificationsScreen({
   };
 
   const deleteNotification = async (id, e) => {
-    e.stopPropagation();
+    if (e && e.stopPropagation) e.stopPropagation();
     setNotifications(prev => prev.filter(n => (n._id || n.id) !== id));
     await deleteNotificationApi(id);
   };
 
   const handleNotificationClick = async (n) => {
+    if (isDraggingRef.current) return;
     const notifId = n._id || n.id;
-    // Mark as read in state & backend
-    if (!n.read && n.unread !== false) {
-      setNotifications(prev => prev.map(item => 
-        (item._id || item.id) === notifId ? { ...item, read: true, unread: false } : item
-      ));
-      markNotificationAsRead(notifId);
-    }
+    // Dismiss/remove this notification so it goes off after opening designated page
+    setNotifications(prev => prev.filter(item => (item._id || item.id) !== notifId));
+    deleteNotificationApi(notifId).catch(() => {});
 
     // Smart 1-tap navigation based on notification type
     if (n.type === 'message') {
@@ -147,23 +145,23 @@ export default function NotificationsScreen({
       <div className="flex-1 overflow-y-auto pb-28 space-y-4 bg-white">
         
         {/* 1. Header Bar: Left Back Button + Logo + Title */}
-        <div className="pt-12 pb-3 px-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-30">
+        <div className="pt-12 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-30">
           <div className="flex items-center gap-3">
             <button
               onClick={() => onNavigateBack ? onNavigateBack() : (setActiveNav && setActiveNav('home'))}
-              className="w-10 h-10 min-w-[40px] max-w-[40px] min-h-[40px] max-h-[40px] rounded-full bg-[#F5F3F3] hover:bg-slate-200/60 border border-slate-100 flex items-center justify-center text-slate-900 transition-all duration-200 hover:-translate-x-1 active:-translate-x-1.5 active:scale-95 shrink-0 group"
+              className="w-11 h-11 min-w-[44px] max-w-[44px] min-h-[44px] max-h-[44px] rounded-full bg-[#F5F3F3] hover:bg-slate-200/60 border border-slate-100 flex items-center justify-center text-slate-900 transition-all duration-200 hover:-translate-x-1 active:-translate-x-1.5 active:scale-95 shrink-0 group"
               title="Back"
             >
-              <ArrowLeft className="w-5 h-5 transition-transform duration-200 group-hover:-translate-x-0.5 group-active:-translate-x-1" />
+              <ArrowLeft className="w-5.5 h-5.5 transition-transform duration-200 group-hover:-translate-x-0.5 group-active:-translate-x-1" />
             </button>
-            <div className="w-8.5 h-8.5 rounded-lg shrink-0 overflow-hidden">
+            <div className="w-9 h-9 min-w-[36px] max-w-[36px] min-h-[36px] max-h-[36px] rounded-lg shrink-0 overflow-hidden flex items-center justify-center">
               <img 
                 src="/campus-buddy-CB-exact-vector (1).svg" 
                 alt="Campus Buddy" 
                 className="w-full h-full object-contain" 
               />
             </div>
-            <span className="text-base font-bold text-slate-900 font-sans tracking-tight">
+            <span className="text-lg font-bold text-slate-900 font-sans tracking-tight">
               Campus Buddy
             </span>
           </div>
@@ -172,10 +170,10 @@ export default function NotificationsScreen({
           <div className="flex items-center gap-2">
             <button 
               onClick={() => setActiveNav && setActiveNav('wishlist')}
-              className="w-9.5 h-9.5 min-w-[38px] max-w-[38px] min-h-[38px] max-h-[38px] rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-900 shadow-xs hover:bg-slate-200/60 transition-colors relative shrink-0"
+              className="w-10 h-10 min-w-[40px] max-w-[40px] min-h-[40px] max-h-[40px] rounded-full bg-[#F5F3F3] border border-slate-100 flex items-center justify-center text-slate-900 shadow-xs hover:bg-slate-200/60 transition-colors relative shrink-0"
               title="My Wishlist"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" className="transition-all duration-200">
+              <svg width="20" height="20" viewBox="0 0 24 24" className="transition-all duration-200">
                 <path d={uploadedHeartPath} fill="none" stroke="#0F172A" strokeWidth="1.8" />
               </svg>
             </button>
@@ -251,80 +249,109 @@ export default function NotificationsScreen({
                   const productImage = (Array.isArray(n.product?.images) && n.product.images[0]) || n.product?.images;
 
                   return (
-                    <motion.div
-                      key={notifId}
-                      layout
-                      initial={{ opacity: 0, y: 15 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-                      onClick={() => handleNotificationClick(n)}
-                      className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center gap-3 relative group ${
-                        n.isUnread 
-                          ? 'bg-[#EEF2FF]/60 border-blue-200 shadow-2xs' 
-                          : 'bg-[#F5F3F3] border-slate-100/90 hover:shadow-xs'
-                      }`}
-                    >
-                      {/* Left Sender Avatar (Clean, no sub-badge) */}
-                      <div className="relative shrink-0 self-center">
-                        {senderAvatar && !['/avatar.svg', '/avatar-blue.svg'].includes(senderAvatar) ? (
-                          <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200/80">
-                            <img src={senderAvatar} alt={senderName} className="w-full h-full object-cover" />
+                    <div key={notifId} className="relative overflow-hidden rounded-2xl select-none">
+                      {/* Swipe background reveal with Trash icon */}
+                      <div className="absolute inset-0 bg-rose-500 rounded-2xl flex items-center justify-between px-4 text-white text-xs font-semibold z-0">
+                        <div className="flex items-center gap-1.5">
+                          <Trash2 className="w-4 h-4" />
+                          <span>Remove</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span>Remove</span>
+                          <Trash2 className="w-4 h-4" />
+                        </div>
+                      </div>
+
+                      <motion.div
+                        layout
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0, x: 0 }}
+                        exit={{ opacity: 0, x: -300, transition: { duration: 0.2 } }}
+                        drag="x"
+                        dragDirectionLock
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={{ left: 0.75, right: 0.75 }}
+                        onDragStart={() => {
+                          isDraggingRef.current = true;
+                        }}
+                        onDragEnd={(_, info) => {
+                          setTimeout(() => { isDraggingRef.current = false; }, 120);
+                          if (Math.abs(info.offset.x) > 85 || Math.abs(info.velocity.x) > 400) {
+                            deleteNotification(notifId);
+                          }
+                        }}
+                        onClick={() => {
+                          if (isDraggingRef.current) return;
+                          handleNotificationClick(n);
+                        }}
+                        className={`p-3 rounded-2xl border transition-colors cursor-pointer flex items-center gap-3 relative z-10 touch-pan-y ${
+                          n.isUnread 
+                            ? 'bg-[#EEF2FF] border-blue-200 shadow-2xs' 
+                            : 'bg-[#F5F3F3] border-slate-100/90 hover:shadow-xs'
+                        }`}
+                      >
+                        {/* Left Sender Avatar (Clean, no sub-badge) */}
+                        <div className="relative shrink-0 self-center">
+                          {senderAvatar && !['/avatar.svg', '/avatar-blue.svg'].includes(senderAvatar) ? (
+                            <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200/80">
+                              <img src={senderAvatar} alt={senderName} className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className={`w-9 h-9 rounded-xl ${n.iconBg} flex items-center justify-center shrink-0 shadow-2xs`}>
+                              <Icon className="w-4 h-4" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0 pr-2">
+                          <h3 className="text-xs font-bold text-slate-900 font-sans leading-snug truncate">
+                            {n.title}
+                          </h3>
+
+                          <p className="text-[11px] text-slate-600 font-normal leading-snug mt-0.5 line-clamp-2">
+                            {n.message}
+                          </p>
+
+                          <div className="mt-1">
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {n.timeStr}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Right Product Thumbnail with Action Icon on bottom-right */}
+                        {productImage ? (
+                          <div className="relative shrink-0 self-center">
+                            <div className="w-11 h-11 rounded-xl overflow-hidden bg-white border border-slate-200/80 shadow-2xs">
+                              <img src={productImage} alt="Product" className="w-full h-full object-cover" />
+                            </div>
+                            {/* Action Icon Badge on Bottom-Right of Product Image */}
+                            <div className={`w-4.5 h-4.5 rounded-full ${n.iconBg} absolute -bottom-1 -right-1 flex items-center justify-center ring-2 ring-white shadow-2xs`}>
+                              <Icon className="w-2.5 h-2.5" />
+                            </div>
                           </div>
                         ) : (
-                          <div className={`w-9 h-9 rounded-xl ${n.iconBg} flex items-center justify-center shrink-0 shadow-2xs`}>
+                          <div className={`w-8 h-8 rounded-xl ${n.iconBg} flex items-center justify-center shrink-0 self-center shadow-2xs`}>
                             <Icon className="w-4 h-4" />
                           </div>
                         )}
-                      </div>
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0 pr-2">
-                        <h3 className="text-xs font-bold text-slate-900 font-sans leading-snug truncate">
-                          {n.title}
-                        </h3>
+                        {/* Right Delete Button */}
+                        <button
+                          onClick={(e) => deleteNotification(notifId, e)}
+                          className="w-6 h-6 rounded-full bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center shrink-0 border border-slate-200/60 transition-colors absolute top-2 right-2 opacity-0 group-hover:opacity-100"
+                          title="Delete notification"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
 
-                        <p className="text-[11px] text-slate-600 font-normal leading-snug mt-0.5 line-clamp-2">
-                          {n.message}
-                        </p>
-
-                        <div className="mt-1">
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            {n.timeStr}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Right Product Thumbnail with Action Icon on bottom-right */}
-                      {productImage ? (
-                        <div className="relative shrink-0 self-center">
-                          <div className="w-11 h-11 rounded-xl overflow-hidden bg-white border border-slate-200/80 shadow-2xs">
-                            <img src={productImage} alt="Product" className="w-full h-full object-cover" />
-                          </div>
-                          {/* Action Icon Badge on Bottom-Right of Product Image */}
-                          <div className={`w-4.5 h-4.5 rounded-full ${n.iconBg} absolute -bottom-1 -right-1 flex items-center justify-center ring-2 ring-white shadow-2xs`}>
-                            <Icon className="w-2.5 h-2.5" />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className={`w-8 h-8 rounded-xl ${n.iconBg} flex items-center justify-center shrink-0 self-center shadow-2xs`}>
-                          <Icon className="w-4 h-4" />
-                        </div>
-                      )}
-
-                      {/* Right Delete Button */}
-                      <button
-                        onClick={(e) => deleteNotification(notifId, e)}
-                        className="w-6 h-6 rounded-full bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center shrink-0 border border-slate-200/60 transition-colors absolute top-2 right-2 opacity-0 group-hover:opacity-100"
-                        title="Delete notification"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-
-                      {/* Unread Indicator Dot */}
-                      {n.isUnread && (
-                        <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#1944F1] ring-2 ring-white" />
-                      )}
-                    </motion.div>
+                        {/* Unread Indicator Dot */}
+                        {n.isUnread && (
+                          <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#1944F1] ring-2 ring-white" />
+                        )}
+                      </motion.div>
+                    </div>
                   );
                 })}
               </div>
