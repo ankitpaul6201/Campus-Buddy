@@ -754,7 +754,7 @@ export default function ProfileScreen({ user, activeNav, setActiveNav, favorites
                           value={draftPhone}
                           maxLength={10}
                           onChange={(e) => setDraftPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                          placeholder="10-digit Phone Number (e.g. 9876543210)"
+                          placeholder="Enter 10-digit Phone Number"
                           className="w-full pl-11 pr-4 py-3 bg-[#F3F4F6] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] transition-all"
                         />
                       </div>
