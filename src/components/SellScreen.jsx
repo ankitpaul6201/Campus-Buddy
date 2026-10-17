@@ -594,16 +594,11 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
               </div>
             </div>
 
-            {/* Contact Phone Number Field (Exactly 10 Digits) */}
+            {/* Contact Phone Number Field */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-slate-800 font-sans block">
-                  Contact Phone Number
-                </label>
-                <span className="text-[10px] font-semibold text-slate-400">
-                  {phone.replace(/\D/g, '').length}/10 digits
-                </span>
-              </div>
+              <label className="text-xs font-semibold text-slate-800 font-sans block">
+                Contact Phone Number
+              </label>
               <div className="relative">
                 <Phone className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
                 <input 
@@ -616,9 +611,6 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
                   required
                 />
               </div>
-              <p className="text-[11px] text-slate-400 font-normal pl-1">
-                Buyers can click the Call button on this ad to call this 10-digit number.
-              </p>
             </div>
 
             {/* Negotiable Card Toggle */}
