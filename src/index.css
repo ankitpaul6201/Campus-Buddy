@@ -29,13 +29,85 @@
   }
 }
 
-/* Custom smooth styling */
+/* Authentic Google Sans Font Family from google sans static */
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/fonts/GoogleSans-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/fonts/GoogleSans-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/fonts/GoogleSans-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/fonts/GoogleSans-MediumItalic.ttf') format('truetype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/fonts/GoogleSans-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/fonts/GoogleSans-SemiBoldItalic.ttf') format('truetype');
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/fonts/GoogleSans-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/fonts/GoogleSans-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Custom smooth styling - Universal Google Sans */
+html, body, #root, * {
+  font-family: 'Google Sans', sans-serif !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
-  font-family: 'Outfit', 'Inter', sans-serif;
   background-color: #F3F4F6;
   color: #0F172A;
-  -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
+}
+
+button, input, textarea, select {
+  font-family: 'Google Sans', sans-serif !important;
 }
 
 /* Prevent native selection callouts and handles on interactive elements */
@@ -82,9 +154,5 @@ input:-webkit-autofill:active {
   transition: background-color 5000s ease-in-out 0s !important;
 }
 
-/* Set font thickness of buttons across the app to regular, keeping profile screen fonts as-is */
-button:not(:is(.profile-screen, .profile-screen *)),
-button:not(:is(.profile-screen, .profile-screen *)) * {
-  font-weight: 400 !important;
-}
+/* End of CSS */
 

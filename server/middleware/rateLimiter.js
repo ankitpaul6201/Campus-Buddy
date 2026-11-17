@@ -19,17 +19,17 @@ function createRateLimiter({ windowMs = 60000, maxRequests = 600, message = 'Too
   if (cleanupTimer.unref) cleanupTimer.unref();
 
   return function rateLimiter(req, res, next) {
-    // Whitelist internal/local health checks and loopback/load-test traffic
-    if (req.path === '/api/health' || req.path === '/api/health/ready' || req.headers['x-load-test'] === 'k6') {
+    // Whitelist internal/local health checks
+    if (req.path === '/api/health' || req.path === '/api/health/ready') {
       return next();
     }
 
-    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
-    const ip = rawIp.split(',')[0].trim();
+    // Use Express validated req.ip (configured with trust proxy)
+    const ip = req.ip || req.socket?.remoteAddress || '127.0.0.1';
 
-    // Do not rate-limit local machine benchmarking
-    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
-      return next();
+    // In local development only, allow loopback benchmarking
+    if (process.env.NODE_ENV !== 'production' && (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1')) {
+      // Apply rate limiter even on local if explicitly testing or keep high ceiling
     }
     const now = Date.now();
 

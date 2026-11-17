@@ -18,6 +18,7 @@ import WishlistScreen from './components/WishlistScreen';
 import NotificationsScreen from './components/NotificationsScreen';
 import ProductDetailsScreen from './components/ProductDetailsScreen';
 import SellerInfoScreen from './components/SellerInfoScreen';
+import FilterSortScreen from './components/FilterSortScreen';
 import UniversityOnboarding from './components/UniversityOnboarding';
 
 export default function App() {
@@ -27,9 +28,21 @@ export default function App() {
     return (user && token) ? 'main' : 'welcome';
   });
   const [activeNav, setActiveNav] = useState('home');
-  const [previousNav, setPreviousNav] = useState('home');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedSeller, setSelectedSeller] = useState(null);
+  const [navStack, setNavStack] = useState(() => [
+    { nav: 'home', product: null, seller: null }
+  ]);
+  const chatBackHandlerRef = useRef(null);
+
+  // Global Filter & Sort State for Marketplace listings
+  const [filterState, setFilterState] = useState({
+    sort: 'recommended',
+    minPrice: '',
+    maxPrice: '',
+    condition: 'all',
+    category: 'all'
+  });
 
   // Traditional JWT Auth state (MongoDB Atlas)
   const [currentUser, setCurrentUser] = useState(() => getStoredUser());
@@ -58,6 +71,17 @@ export default function App() {
   }, [favorites, currentUser?._id, currentUser?.id]);
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef = useRef(0);
+  const exitToastTimerRef = useRef(null);
+
+  const currentScreenRef = useRef(currentScreen);
+  const activeNavRef = useRef(activeNav);
+  const selectedProductRef = useRef(selectedProduct);
+  const selectedSellerRef = useRef(selectedSeller);
+
+  currentScreenRef.current = currentScreen;
+  activeNavRef.current = activeNav;
+  selectedProductRef.current = selectedProduct;
+  selectedSellerRef.current = selectedSeller;
   const [notifications, setNotifications] = useState([]);
   const [activeNotificationToast, setActiveNotificationToast] = useState(null);
   const [userAds, setUserAds] = useState(() => {
@@ -68,6 +92,7 @@ export default function App() {
     }
   });
   const [activeChatTarget, setActiveChatTarget] = useState(null);
+  const [isChatThreadOpen, setIsChatThreadOpen] = useState(false);
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
   const refreshUnreadChats = async () => {
@@ -270,49 +295,206 @@ export default function App() {
     };
   }, [currentUser]);
 
-  // Back button / Left-swipe event listener for Android
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
+  const navigateTo = (nav, options = {}) => {
+    const { product = null, seller = null, replace = false } = options;
 
-    const backListener = CapApp.addListener('backButton', () => {
-      if (currentScreen === 'main') {
-        if (activeNav === 'seller-info') {
-          setActiveNav('product-details');
-        } else if (activeNav === 'product-details') {
-          setActiveNav(previousNav || 'home');
-          setSelectedProduct(null);
-        } else if (activeNav !== 'home') {
-          // Redirect to home screen first if on another screen!
-          setActiveNav('home');
-        } else {
-          // Double press to exit when on home screen
-          const now = Date.now();
-          if (now - lastBackPressRef.current < 2000) {
-            CapApp.exitApp();
-          } else {
-            lastBackPressRef.current = now;
-            setShowExitToast(true);
-            setTimeout(() => setShowExitToast(false), 2000);
-          }
-        }
-      } else if (currentScreen === 'login' || currentScreen === 'signup') {
-        setCurrentScreen('welcome');
-      } else if (currentScreen === 'welcome') {
-        const now = Date.now();
-        if (now - lastBackPressRef.current < 2000) {
-          CapApp.exitApp();
-        } else {
-          lastBackPressRef.current = now;
-          setShowExitToast(true);
-          setTimeout(() => setShowExitToast(false), 2000);
-        }
+    if (nav !== 'chats') {
+      setIsChatThreadOpen(false);
+    }
+
+    setNavStack(prev => {
+      const current = prev[prev.length - 1];
+      if (
+        current &&
+        current.nav === nav &&
+        (current.product?._id || current.product?.id) === (product?._id || product?.id) &&
+        (current.seller?._id || current.seller?.id) === (seller?._id || seller?.id)
+      ) {
+        return prev;
       }
+
+      const newEntry = { nav, product, seller };
+      if (replace) {
+        const next = [...prev];
+        next[next.length - 1] = newEntry;
+        return next;
+      }
+      return [...prev, newEntry];
     });
 
-    return () => {
-      backListener.then(h => h.remove());
+    setActiveNav(nav);
+    setSelectedProduct(product);
+    setSelectedSeller(seller);
+  };
+
+  const handleGoBack = () => {
+    // 1. If inside ChatScreen and a conversation thread is open, close thread first
+    if (activeNav === 'chats' && chatBackHandlerRef.current && chatBackHandlerRef.current()) {
+      return;
+    }
+
+    setNavStack(prev => {
+      if (prev.length <= 1) {
+        if (activeNav !== 'home') {
+          setActiveNav('home');
+          setSelectedProduct(null);
+          setSelectedSeller(null);
+          return [{ nav: 'home', product: null, seller: null }];
+        }
+        return prev;
+      }
+
+      const nextStack = prev.slice(0, -1);
+      const prevEntry = nextStack[nextStack.length - 1];
+
+      setActiveNav(prevEntry.nav);
+      setSelectedProduct(prevEntry.product || null);
+      setSelectedSeller(prevEntry.seller || null);
+
+      return nextStack;
+    });
+  };
+
+  const handleUniversalBack = () => {
+    const screen = currentScreenRef.current;
+    const nav = activeNavRef.current;
+    const hasOpenProduct = Boolean(selectedProductRef.current);
+    const hasOpenSeller = Boolean(selectedSellerRef.current);
+
+    if (screen === 'main') {
+      const isAtHome = (nav === 'home' && !hasOpenProduct && !hasOpenSeller);
+
+      if (!isAtHome) {
+        // "AND IF A USER IS IN ANY OTHER SCREEN IT 1ST BRINGS HIM BACK TO HOME SCREEN THEN EXITS THE APP"
+        setActiveNav('home');
+        setSelectedProduct(null);
+        setSelectedSeller(null);
+        setNavStack([{ nav: 'home', product: null, seller: null }]);
+        lastBackPressRef.current = 0;
+        setShowExitToast(false);
+        if (exitToastTimerRef.current) clearTimeout(exitToastTimerRef.current);
+        return;
+      }
+
+      // "WHENVER A USER IS IN THE HOME SCREEN HE HAS TO SWIPE TWICE OR CLICK THE APP CLOSING BUTTON TWICE THE PHONE NAVIGATION BUTTON IN ORDER TO EXIT THE APP"
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        if (Capacitor.isNativePlatform()) {
+          CapApp.exitApp();
+        } else {
+          setShowExitToast(false);
+          try { window.close(); } catch {}
+        }
+      } else {
+        lastBackPressRef.current = now;
+        setShowExitToast(true);
+        if (exitToastTimerRef.current) clearTimeout(exitToastTimerRef.current);
+        exitToastTimerRef.current = setTimeout(() => {
+          setShowExitToast(false);
+          lastBackPressRef.current = 0;
+        }, 2000);
+      }
+    } else if (screen === 'login' || screen === 'signup') {
+      setCurrentScreen('welcome');
+      lastBackPressRef.current = 0;
+      setShowExitToast(false);
+      if (exitToastTimerRef.current) clearTimeout(exitToastTimerRef.current);
+    } else if (screen === 'welcome') {
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        if (Capacitor.isNativePlatform()) {
+          CapApp.exitApp();
+        } else {
+          try { window.close(); } catch {}
+        }
+      } else {
+        lastBackPressRef.current = now;
+        setShowExitToast(true);
+        if (exitToastTimerRef.current) clearTimeout(exitToastTimerRef.current);
+        exitToastTimerRef.current = setTimeout(() => {
+          setShowExitToast(false);
+          lastBackPressRef.current = 0;
+        }, 2000);
+      }
+    }
+  };
+
+  const handleUniversalBackRef = useRef(handleUniversalBack);
+  handleUniversalBackRef.current = handleUniversalBack;
+
+  // Persistent Phone Navigation Button & Swipe Gesture Listener
+  useEffect(() => {
+    // 1. Native Capacitor backButton (Android navigation button & system gesture navigation)
+    let nativeHandle = null;
+    if (Capacitor.isNativePlatform()) {
+      CapApp.addListener('backButton', () => {
+        if (handleUniversalBackRef.current) {
+          handleUniversalBackRef.current();
+        }
+      }).then(handle => {
+        nativeHandle = handle;
+      }).catch(() => {});
+    }
+
+    // 2. Popstate Trap for mobile browsers / WebViews
+    const handlePopState = () => {
+      if (handleUniversalBackRef.current) {
+        handleUniversalBackRef.current();
+      }
+      try {
+        window.history.pushState({ page: 'campus_buddy' }, '');
+      } catch {}
     };
-  }, [currentScreen, activeNav, previousNav]);
+    try {
+      window.history.pushState({ page: 'campus_buddy' }, '');
+      window.addEventListener('popstate', handlePopState);
+    } catch {}
+
+    // 3. Touch Edge-Swipe Gesture Listener (Swiping from left or right edge inwards)
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+
+    const handleTouchStart = (e) => {
+      if (!e.touches || e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchStartTime = Date.now();
+    };
+
+    const handleTouchEnd = (e) => {
+      if (!e.changedTouches || e.changedTouches.length !== 1) return;
+      const touch = e.changedTouches[0];
+      const deltaX = touch.clientX - touchStartX;
+      const deltaY = touch.clientY - touchStartY;
+      const deltaTime = Date.now() - touchStartTime;
+
+      if (deltaTime > 400 || Math.abs(deltaY) > 60) return;
+
+      const windowWidth = window.innerWidth;
+      const isLeftEdgeSwipe = touchStartX <= 40 && deltaX > 65;
+      const isRightEdgeSwipe = touchStartX >= windowWidth - 40 && deltaX < -65;
+
+      if (isLeftEdgeSwipe || isRightEdgeSwipe) {
+        if (handleUniversalBackRef.current) {
+          handleUniversalBackRef.current();
+        }
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      if (nativeHandle && typeof nativeHandle.remove === 'function') {
+        nativeHandle.remove();
+      }
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
 
   const primaryColor = '#1944F1';
   const inactiveColor = '#94A3B8';
@@ -325,8 +507,8 @@ export default function App() {
     setNotifications([]);
     setFavorites([]);
     setUnreadChatsCount(0);
+    setNavStack([{ nav: 'home', product: null, seller: null }]);
     setActiveNav('home');
-    setPreviousNav('home');
     setSelectedProduct(null);
     setSelectedSeller(null);
     try {
@@ -348,8 +530,8 @@ export default function App() {
     setCurrentUser(user);
     setUserAds([]); // Clear previous user's ads immediately
     setFavorites(getStoredFavorites(user)); // Load strictly this user's wishlist
+    setNavStack([{ nav: 'home', product: null, seller: null }]);
     setActiveNav('home'); // Always redirect directly to Home marketplace upon login
-    setPreviousNav('home');
     setSelectedProduct(null);
     setSelectedSeller(null);
     setCurrentScreen('main');
@@ -385,18 +567,71 @@ export default function App() {
 
   // Handle navigating to the separate Product Details Screen
   const handleSelectProduct = (product) => {
-    setSelectedProduct(product);
-    setPreviousNav(activeNav);
-    setActiveNav('product-details');
+    navigateTo('product-details', { product });
   };
 
-  const handleProductDetailBack = () => {
-    setActiveNav(previousNav || 'home');
-    setSelectedProduct(null);
+  const handleSetActiveNav = (tab) => {
+    if (tab === activeNav) return;
+    navigateTo(tab);
   };
 
-  // Show bottom nav bar only for main tab screens and NEVER during splash / loading screen
-  const showBottomNav = !authLoading && !showSplash && currentScreen === 'main' && ['home', 'chats', 'sell', 'myads', 'profile'].includes(activeNav);
+  // Detect when mobile keyboard is open or any input/textarea is focused to prevent navigation panel from popping up
+  const [isInputActive, setIsInputActive] = useState(false);
+
+  useEffect(() => {
+    const handleFocusIn = (e) => {
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) {
+        setIsInputActive(true);
+      }
+    };
+
+    const handleFocusOut = (e) => {
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) {
+        setTimeout(() => {
+          const activeTag = document.activeElement?.tagName?.toLowerCase();
+          if (activeTag !== 'input' && activeTag !== 'textarea' && !document.activeElement?.isContentEditable) {
+            setIsInputActive(false);
+          }
+        }, 80);
+      }
+    };
+
+    window.addEventListener('focusin', handleFocusIn);
+    window.addEventListener('focusout', handleFocusOut);
+
+    const handleViewportResize = () => {
+      if (window.visualViewport) {
+        const isKeyboardUp = (window.innerHeight - window.visualViewport.height) > 120;
+        if (isKeyboardUp) {
+          setIsInputActive(true);
+        } else {
+          const activeTag = document.activeElement?.tagName?.toLowerCase();
+          if (activeTag !== 'input' && activeTag !== 'textarea' && !document.activeElement?.isContentEditable) {
+            setIsInputActive(false);
+          }
+        }
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportResize);
+    }
+
+    return () => {
+      window.removeEventListener('focusin', handleFocusIn);
+      window.removeEventListener('focusout', handleFocusOut);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleViewportResize);
+      }
+    };
+  }, []);
+
+  // Hide navigation panel when in active chatting window or when typing in chats screen
+  const isInsideChatThread = activeNav === 'chats' && (isChatThreadOpen || Boolean(activeChatTarget));
+  const isTypingInChats = activeNav === 'chats' && isInputActive;
+  const showBottomNav = !authLoading && !showSplash && currentScreen === 'main' && ['home', 'chats', 'sell', 'myads', 'profile'].includes(activeNav) && !isInsideChatThread && !isTypingInChats;
 
   return (
     <div className="w-full h-full min-h-screen bg-white text-slate-900 font-sans overflow-hidden select-none relative flex flex-col justify-between">
@@ -503,7 +738,7 @@ export default function App() {
                 key="home" 
                 user={userForScreens} 
                 activeNav={activeNav}
-                setActiveNav={setActiveNav}
+                setActiveNav={handleSetActiveNav}
                 favorites={favorites}
                 setFavorites={setFavorites}
                 notifications={notifications}
@@ -511,10 +746,33 @@ export default function App() {
                 onSelectProduct={handleSelectProduct}
                 onOpenChat={(target) => {
                   setActiveChatTarget(target);
-                  setActiveNav('chats');
+                  navigateTo('chats', { product: selectedProduct });
                 }}
                 onNavigate={(screen) => setCurrentScreen(screen)} 
                 onInitialLoadComplete={() => setHomeDataReady(true)}
+                onOpenFilterSort={() => navigateTo('filter-sort')}
+                filterState={filterState}
+                setFilterState={setFilterState}
+              />
+            )}
+            {activeNav === 'filter-sort' && (
+              <FilterSortScreen
+                key="filter-sort"
+                filterState={filterState}
+                onApplyFilters={(newFilters) => {
+                  setFilterState(newFilters);
+                  handleGoBack();
+                }}
+                onResetFilters={() => {
+                  setFilterState({
+                    sort: 'recommended',
+                    minPrice: '',
+                    maxPrice: '',
+                    condition: 'all',
+                    category: 'all'
+                  });
+                }}
+                onNavigateBack={handleGoBack}
               />
             )}
             {activeNav === 'product-details' && selectedProduct && (
@@ -526,19 +784,17 @@ export default function App() {
                 setFavorites={setFavorites}
                 userAds={userAds}
                 setUserAds={setUserAds}
-                onNavigateBack={handleProductDetailBack}
+                onNavigateBack={handleGoBack}
                 onViewSellerInfo={(sellerData) => {
-                  setSelectedSeller(sellerData);
-                  setActiveNav('seller-info');
+                  navigateTo('seller-info', { product: selectedProduct, seller: sellerData });
                   window.scrollTo(0, 0);
                 }}
                 onOpenChat={(target) => {
                   setActiveChatTarget(target);
-                  setActiveNav('chats');
+                  navigateTo('chats', { product: selectedProduct });
                 }}
                 onManageMyAds={() => {
-                  setActiveNav('myads');
-                  setSelectedProduct(null);
+                  navigateTo('myads');
                 }}
               />
             )}
@@ -549,10 +805,10 @@ export default function App() {
                 product={selectedProduct}
                 user={userForScreens}
                 userAds={userAds}
-                onNavigateBack={() => setActiveNav('product-details')}
+                onNavigateBack={handleGoBack}
                 onOpenChat={(target) => {
                   setActiveChatTarget(target);
-                  setActiveNav('chats');
+                  navigateTo('chats', { product: selectedProduct });
                 }}
               />
             )}
@@ -561,13 +817,18 @@ export default function App() {
                 key="chats"
                 user={userForScreens}
                 activeNav={activeNav} 
-                setActiveNav={setActiveNav} 
+                setActiveNav={handleSetActiveNav} 
                 favorites={favorites}
+                setFavorites={setFavorites}
                 notifications={notifications}
+                setNotifications={setNotifications}
                 activeChatTarget={activeChatTarget}
                 setActiveChatTarget={setActiveChatTarget}
                 onRefreshUnreadChats={refreshUnreadChats}
-                onNavigateBack={() => setActiveNav('home')} 
+                onNavigateBack={handleGoBack}
+                onRegisterBackHandler={(fn) => { chatBackHandlerRef.current = fn; }}
+                onChatThreadStateChange={setIsChatThreadOpen}
+                isInputActive={isInputActive}
               />
             )}
             {activeNav === 'sell' && (
@@ -575,16 +836,17 @@ export default function App() {
                 key="sell"
                 user={userForScreens}
                 activeNav={activeNav} 
-                setActiveNav={setActiveNav} 
+                setActiveNav={handleSetActiveNav} 
                 favorites={favorites}
+                setFavorites={setFavorites}
                 notifications={notifications}
                 userAds={userAds}
                 setUserAds={setUserAds}
                 onAdCreated={(newAd) => {
                   setUserAds(prev => [newAd, ...prev.filter(a => (a._id || a.id) !== (newAd._id || newAd.id))]);
-                  setActiveNav('myads');
+                  navigateTo('myads');
                 }}
-                onNavigateBack={() => setActiveNav('home')} 
+                onNavigateBack={handleGoBack} 
               />
             )}
             {activeNav === 'myads' && (
@@ -592,13 +854,14 @@ export default function App() {
                 key="myads"
                 user={userForScreens}
                 activeNav={activeNav} 
-                setActiveNav={setActiveNav} 
+                setActiveNav={handleSetActiveNav} 
                 favorites={favorites}
+                setFavorites={setFavorites}
                 notifications={notifications}
                 userAds={userAds}
                 setUserAds={setUserAds}
                 onSelectProduct={handleSelectProduct}
-                onNavigateBack={() => setActiveNav('home')} 
+                onNavigateBack={handleGoBack} 
               />
             )}
             {activeNav === 'profile' && (
@@ -606,8 +869,9 @@ export default function App() {
                 key="profile"
                 user={userForScreens}
                 activeNav={activeNav} 
-                setActiveNav={setActiveNav} 
+                setActiveNav={handleSetActiveNav} 
                 favorites={favorites}
+                setFavorites={setFavorites}
                 notifications={notifications}
                 userAds={userAds}
                 onUpdateUser={(updated) => {
@@ -621,7 +885,7 @@ export default function App() {
                     })));
                   }
                 }}
-                onNavigateBack={() => setActiveNav('home')} 
+                onNavigateBack={handleGoBack} 
                 onLogout={handleLogout}
               />
             )}
@@ -630,7 +894,7 @@ export default function App() {
                 key="wishlist"
                 user={userForScreens}
                 activeNav={activeNav}
-                setActiveNav={setActiveNav}
+                setActiveNav={handleSetActiveNav}
                 favorites={favorites}
                 setFavorites={setFavorites}
                 notifications={notifications}
@@ -638,9 +902,9 @@ export default function App() {
                 onSelectProduct={handleSelectProduct}
                 onOpenChat={(target) => {
                   setActiveChatTarget(target);
-                  setActiveNav('chats');
+                  navigateTo('chats', { product: selectedProduct });
                 }}
-                onNavigateBack={() => setActiveNav('home')}
+                onNavigateBack={handleGoBack}
               />
             )}
             {activeNav === 'notifications' && (
@@ -648,16 +912,17 @@ export default function App() {
                 key="notifications"
                 user={userForScreens}
                 activeNav={activeNav}
-                setActiveNav={setActiveNav}
+                setActiveNav={handleSetActiveNav}
                 favorites={favorites}
+                setFavorites={setFavorites}
                 notifications={notifications}
                 setNotifications={setNotifications}
                 onSelectProduct={handleSelectProduct}
                 onOpenChat={(target) => {
                   setActiveChatTarget(target);
-                  setActiveNav('chats');
+                  navigateTo('chats', { product: selectedProduct });
                 }}
-                onNavigateBack={() => setActiveNav('home')}
+                onNavigateBack={handleGoBack}
               />
             )}
           </AnimatePresence>
@@ -670,7 +935,7 @@ export default function App() {
           
           {/* 1. Home Tab */}
           <button
-            onClick={() => setActiveNav('home')}
+            onClick={() => navigateTo('home')}
             className="flex flex-col items-center justify-center gap-1 py-0.5 px-2 transition-all active:scale-90 min-w-[56px]"
           >
             <svg width="25" height="25" viewBox="0 0 24 24" className="transition-all duration-200">
@@ -698,7 +963,7 @@ export default function App() {
           {/* 2. Chats Tab */}
           <button
             onClick={() => {
-              setActiveNav('chats');
+              navigateTo('chats');
               refreshUnreadChats();
             }}
             className="flex flex-col items-center justify-center gap-1 py-0.5 px-2 transition-all active:scale-90 min-w-[56px]"
@@ -730,17 +995,47 @@ export default function App() {
             </span>
           </button>
 
-          {/* 3. Sell Tab (Center Action Button) */}
-          <div className="-mt-8 flex flex-col items-center justify-center px-1">
+          {/* 3. Sell Tab (Center Action Button) - Ring only appears when clicked / on Sell page */}
+          <div className="-mt-10 flex flex-col items-center justify-center px-1">
             <button
-              onClick={() => setActiveNav('sell')}
-              className={`w-13.5 h-13.5 min-w-[54px] max-w-[54px] min-h-[54px] max-h-[54px] rounded-full flex items-center justify-center shadow-xl transition-all active:scale-90 p-2.5 border-4 border-white ${
-                activeNav === 'sell'
-                  ? 'bg-[#1944F1] text-white ring-4 ring-blue-100 scale-105 shadow-blue-500/40'
-                  : 'bg-[#1944F1] text-white shadow-blue-500/30 hover:scale-105'
-              }`}
+              onClick={() => navigateTo('sell')}
+              className="relative flex items-center justify-center transition-transform active:scale-95 group cursor-pointer focus:outline-none"
+              title="Sell an item"
             >
-              <img src="/add-ellipse-svgrepo-com.svg" alt="Sell" className="w-7 h-7 filter brightness-0 invert" />
+              {/* Outer Translucent Ring / Gradient Halo - Only visible when clicked or on the Sell page */}
+              <div 
+                className={`w-[74px] h-[74px] rounded-full flex items-center justify-center transition-all duration-300 ${
+                  activeNav === 'sell' ? 'scale-105' : 'hover:scale-105'
+                }`}
+                style={{
+                  background: activeNav === 'sell' 
+                    ? 'radial-gradient(circle, rgba(25, 68, 241, 0.36) 48%, rgba(25, 68, 241, 0.16) 72%, rgba(25, 68, 241, 0) 100%)' 
+                    : 'transparent',
+                  boxShadow: activeNav === 'sell' ? '0 0 16px 2px rgba(25, 68, 241, 0.35)' : 'none',
+                }}
+              >
+                {/* Inner Solid Circular Button (App Brand Blue) - shadow only when on sell screen */}
+                <div 
+                  className={`w-[56px] h-[56px] rounded-full flex items-center justify-center transition-all duration-200 ${
+                    activeNav === 'sell' ? 'shadow-lg shadow-[#1944F1]/40' : 'shadow-none'
+                  }`}
+                  style={{
+                    backgroundColor: '#1944F1',
+                  }}
+                >
+                  {/* Clean sleek rounded plus logo matching user reference with app color */}
+                  <svg 
+                    width="34" 
+                    height="34" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    className="text-white"
+                  >
+                    <line x1="12" y1="5.5" x2="12" y2="18.5" stroke="#FFFFFF" strokeWidth="2.35" strokeLinecap="round" />
+                    <line x1="5.5" y1="12" x2="18.5" y2="12" stroke="#FFFFFF" strokeWidth="2.35" strokeLinecap="round" />
+                  </svg>
+                </div>
+              </div>
             </button>
             <span className={`text-xs block text-center mt-0.5 transition-colors duration-200 ${
               activeNav === 'sell' ? 'text-[#1944F1] font-bold' : 'text-slate-500 font-semibold'
@@ -751,15 +1046,26 @@ export default function App() {
 
           {/* 4. My Ads Tab */}
           <button
-            onClick={() => setActiveNav('myads')}
+            onClick={() => navigateTo('myads')}
             className="flex flex-col items-center justify-center gap-1 py-0.5 px-2 transition-all active:scale-90 min-w-[56px]"
           >
-            <svg width="25" height="25" viewBox="0 0 24 24" className="transition-all duration-200">
-              <g fill={activeNav === 'myads' ? primaryColor : inactiveColor} className="transition-colors duration-200">
-                <path fillRule="evenodd" clipRule="evenodd" d="M5.25 14.5001C5.25 14.0858 5.58579 13.7501 6 13.7501H14C14.4142 13.7501 14.75 14.0858 14.75 14.5001C14.75 14.9143 14.4142 15.2501 14 15.2501H6C5.58579 15.2501 5.25 14.9143 5.25 14.5001Z" />
-                <path fillRule="evenodd" clipRule="evenodd" d="M5.25 18C5.25 17.5858 5.58579 17.25 6 17.25H11.5C11.9142 17.25 12.25 17.5858 12.25 18C12.25 18.4143 11.9142 18.75 11.5 18.75H6C5.58579 18.75 5.25 18.4143 5.25 18Z" />
-                <path fillRule="evenodd" clipRule="evenodd" d="M12.25 2.83422C11.7896 2.75598 11.162 2.75005 10.0298 2.75005C8.11311 2.75005 6.75075 2.75163 5.71785 2.88987C4.70596 3.0253 4.12453 3.27933 3.7019 3.70195C3.27869 4.12516 3.02502 4.70481 2.88976 5.7109C2.75159 6.73856 2.75 8.09323 2.75 10.0001V14.0001C2.75 15.9069 2.75159 17.2615 2.88976 18.2892C3.02502 19.2953 3.27869 19.8749 3.7019 20.2981C4.12511 20.7214 4.70476 20.975 5.71085 21.1103C6.73851 21.2485 8.09318 21.2501 10 21.2501H14C15.9068 21.2501 17.2615 21.2485 18.2892 21.1103C19.2952 20.975 19.8749 20.7214 20.2981 20.2981C20.7213 19.8749 20.975 19.2953 21.1102 18.2892C21.2484 17.2615 21.25 15.9069 21.25 14.0001V13.5629C21.25 12.0269 21.2392 11.2988 21.0762 10.7501H17.9463C16.8135 10.7501 15.8877 10.7501 15.1569 10.6518C14.3929 10.5491 13.7306 10.3268 13.2019 9.79815C12.6732 9.26945 12.4509 8.60712 12.3482 7.84317C12.25 7.1123 12.25 6.18657 12.25 5.05374V2.83422ZM13.75 3.6095V5.00005C13.75 6.19976 13.7516 7.0241 13.8348 7.64329C13.9152 8.24091 14.059 8.53395 14.2626 8.73749C14.4661 8.94103 14.7591 9.08486 15.3568 9.16521C15.976 9.24846 16.8003 9.25005 18 9.25005H20.0195C19.723 8.9625 19.3432 8.61797 18.85 8.17407L14.8912 4.61117C14.4058 4.17433 14.0446 3.85187 13.75 3.6095ZM10.1755 1.25002C11.5601 1.24965 12.4546 1.24942 13.2779 1.56535C14.1012 1.88129 14.7632 2.47735 15.7873 3.39955C15.8226 3.43139 15.8584 3.46361 15.8947 3.49623L19.8534 7.05912C19.8956 7.09705 19.9372 7.1345 19.9783 7.17149C21.162 8.23614 21.9274 8.92458 22.3391 9.84902C22.7508 10.7734 22.7505 11.8029 22.75 13.3949C22.75 13.4502 22.75 13.5062 22.75 13.5629V14.0565C22.75 15.8942 22.75 17.3499 22.5969 18.4891C22.4392 19.6615 22.1071 20.6104 21.3588 21.3588C20.6104 22.1072 19.6614 22.4393 18.489 22.5969C17.3498 22.7501 15.8942 22.7501 14.0564 22.7501H9.94359C8.10583 22.7501 6.65019 22.7501 5.51098 22.5969C4.33856 22.4393 3.38961 22.1072 2.64124 21.3588C1.89288 20.6104 1.56076 19.6615 1.40314 18.4891C1.24997 17.3499 1.24998 15.8942 1.25 14.0565V9.94363C1.24998 8.10587 1.24997 6.65024 1.40314 5.51103C1.56076 4.33861 1.89288 3.38966 2.64124 2.64129C3.39019 1.89235 4.34232 1.56059 5.51887 1.40313C6.66283 1.25002 8.1257 1.25003 9.97352 1.25005L10.0298 1.25005C10.0789 1.25005 10.1275 1.25004 10.1755 1.25002Z" />
-              </g>
+            <svg width="25" height="25" viewBox="0 0 24 24" fill="none" className="transition-all duration-200">
+              {activeNav === 'myads' ? (
+                // Clickons/Open_solid.svg when active
+                <g fill={primaryColor} className="transition-colors duration-200">
+                  <path d="M21.3604 13H19.6726H6.76565C5.97137 13 5.1771 13.2857 4.58139 13.7619C4.18426 14.0476 3.8864 14.5238 3.68783 15L2.79427 17.0952L2.09928 18.8095C2 19 2 19.1905 2 19.381C2 19.6667 2.09928 19.9524 2.19857 20.1429C2.49642 20.619 2.99284 21 3.68783 21H18.1833C19.5733 21 20.7647 20.2381 21.2612 19L22.8497 15.1905C23.3461 14.1429 22.5519 13 21.3604 13Z" />
+                  <path d="M1.98522 14.4074C2.18227 13.9926 2.37931 13.5778 2.67488 13.163C2.87192 12.8519 3.06897 12.6444 3.36453 12.3333C4.25123 11.5037 5.4335 10.9852 6.71429 10.9852H19.4236H20.2118H21V9.11852C21 7.14815 19.5222 5.59259 17.6502 5.59259H12.133L10.8522 4.24444C10.1626 3.41481 9.07882 3 7.99507 3H4.34975C2.47783 3 1 4.55556 1 6.52593V17L1.78818 14.8222L1.98522 14.4074Z" />
+                </g>
+              ) : (
+                // Clickons/Open.svg when inactive
+                <g fill={inactiveColor} className="transition-colors duration-200">
+                  <path 
+                    d="M3 6.25175C3 5.69126 3.60677 5 4.44068 5H8C8.61014 5 9.25791 5.22846 9.64544 5.60153C9.6537 5.60948 9.66209 5.61729 9.67062 5.62496L11.196 6.99559C11.3796 7.16051 11.6176 7.25175 11.8644 7.25175H17.5593C18.2331 7.25175 18.9079 7.71314 19.0125 8.36759C19.0997 8.91296 19.6124 9.28441 20.1578 9.19726C20.7032 9.11011 21.0746 8.59735 20.9875 8.05199C20.6853 6.16099 18.9195 5.25175 17.5593 5.25175H12.2477L11.0191 4.14784C10.187 3.35511 9.01152 3 8 3H4.44068C2.63052 3 1 4.46259 1 6.25175V18C1 18.0429 1.0027 18.0851 1.00793 18.1265C0.894982 19.5728 2.04026 21 3.60391 21H17.3975C19.1083 21 20.6694 19.9396 21.321 18.3551L22.8239 14.5994L22.8256 14.5951C23.477 12.9453 22.2217 11 20.3962 11H6.60253C5.53741 11 4.62249 11.4072 3.87757 12.0299C3.52381 12.3027 3.23188 12.6306 3 13.005V6.25175ZM5.1486 13.5742C5.59967 13.1934 6.07755 13 6.60253 13H20.3962C20.5603 13 20.744 13.0912 20.8764 13.2895C21.0096 13.489 21.0271 13.7027 20.9659 13.8592L20.9653 13.8606L19.4696 17.5985C19.1207 18.442 18.2842 19 17.3975 19H3.60391C3.43981 19 3.25609 18.9088 3.12367 18.7105C2.99052 18.5111 2.97298 18.2975 3.03413 18.1409L4.53235 14.3968L4.53404 14.3925C4.67267 14.0414 4.86641 13.7903 5.1085 13.6063C5.12214 13.596 5.13551 13.5853 5.1486 13.5742Z" 
+                    fillRule="evenodd" 
+                    clipRule="evenodd" 
+                  />
+                </g>
+              )}
             </svg>
             <span className={`text-xs transition-colors duration-200 ${
               activeNav === 'myads' ? 'text-[#1944F1] font-bold' : 'text-slate-400 font-medium'
@@ -770,7 +1076,7 @@ export default function App() {
 
           {/* 5. Profile Tab */}
           <button
-            onClick={() => setActiveNav('profile')}
+            onClick={() => navigateTo('profile')}
             className="flex flex-col items-center justify-center gap-1 py-0.5 px-2 transition-all active:scale-90 min-w-[56px]"
           >
             <svg width="25" height="25" viewBox="0 0 32 32" className="transition-all duration-200">
@@ -800,32 +1106,22 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating Exit Toast for Android Back Button / Gesture */}
-      {showExitToast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '96px',
-            left: 0,
-            right: 0,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 100,
-            pointerEvents: 'none',
-          }}
-        >
+      {/* Floating Exit Toast for Phone Navigation Button / Gesture Swipe */}
+      <AnimatePresence>
+        {showExitToast && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            initial={{ opacity: 0, y: 15, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="fixed bottom-24 left-0 right-0 flex justify-center items-center z-[100] pointer-events-none px-4"
           >
-            <img src="/group_3.svg" alt="CB" style={{ width: '16px', height: '16px', objectFit: 'contain', borderRadius: '3px' }} />
-            <span style={{ color: '#000', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>Press back again to exit Campus Buddy</span>
+            <div className="bg-white text-slate-800 text-xs font-semibold px-4 py-2 rounded-full shadow-lg border border-slate-200/90">
+              <span>Press or swipe back again to exit</span>
+            </div>
           </motion.div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
       {/* Floating Real-Time In-App Push Notification Banner Toast */}
       <AnimatePresence>

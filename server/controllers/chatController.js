@@ -178,6 +178,25 @@ async function getMessages(req, res, next) {
       });
     }
 
+    // Dismiss notifications for this conversation so they don't linger
+    try {
+      const Notification = require('../models/Notification');
+      const deletedRes = await Notification.deleteMany({
+        recipient: userId,
+        type: 'message',
+        conversation: conversation._id
+      });
+      if (deletedRes.deletedCount > 0) {
+        const unreadCount = await Notification.countDocuments({
+          recipient: userId,
+          read: false
+        });
+        emitToUser(userId, 'notification:unread_count', { unreadCount });
+      }
+    } catch (notifErr) {
+      console.warn('Error clearing notifications on getMessages:', notifErr.message);
+    }
+
     res.json(conversation.messages);
   } catch (err) {
     next(err);

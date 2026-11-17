@@ -18,7 +18,7 @@ module.exports = function (req, res, next) {
   }
 
   try {
-    const secret = process.env.JWT_SECRET || 'campus_buddy_super_secret_jwt_key_2026_token_auth';
+    const secret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('FATAL: JWT_SECRET environment variable is missing.'); })() : 'campus_buddy_dev_jwt_secret');
     const decoded = jwt.verify(token, secret);
     
     // Attach decoded user info (id, email)

@@ -17,6 +17,7 @@ import {
   deleteNotificationApi, 
   clearAllNotificationsApi 
 } from '../lib/api';
+import EmptyState from './EmptyState';
 
 export default function NotificationsScreen({ 
   user, 
@@ -29,6 +30,7 @@ export default function NotificationsScreen({
   onSelectProduct
 }) {
   const [activeFilter, setActiveFilter] = useState('all');
+  const [draggingId, setDraggingId] = useState(null);
   const isDraggingRef = useRef(false);
 
   const uploadedHeartPath = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z";
@@ -108,7 +110,15 @@ export default function NotificationsScreen({
     if (n.createdAt) {
       try {
         const d = new Date(n.createdAt);
-        timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const now = new Date();
+        const isToday = d.toDateString() === now.toDateString();
+        const timePart = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (isToday) {
+          timeStr = timePart;
+        } else {
+          const datePart = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+          timeStr = `${datePart}, ${timePart}`;
+        }
       } catch {}
     } else if (n.time) {
       timeStr = n.time;
@@ -195,16 +205,7 @@ export default function NotificationsScreen({
             </div>
 
             <div className="flex items-center gap-2">
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllAsRead}
-                  className="text-[11px] font-semibold text-[#1944F1] hover:bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full transition-colors shrink-0 flex items-center gap-1"
-                  title="Mark all as read"
-                >
-                  <CheckCheck className="w-3 h-3" />
-                  <span className="hidden sm:inline">Mark Read</span>
-                </button>
-              )}
+
 
               {notifications.length > 0 && (
                 <button
@@ -250,17 +251,19 @@ export default function NotificationsScreen({
 
                   return (
                     <div key={notifId} className="relative overflow-hidden rounded-2xl select-none">
-                      {/* Swipe background reveal with Trash icon */}
-                      <div className="absolute inset-0 bg-rose-500 rounded-2xl flex items-center justify-between px-4 text-white text-xs font-semibold z-0">
-                        <div className="flex items-center gap-1.5">
-                          <Trash2 className="w-4 h-4" />
-                          <span>Remove</span>
+                      {/* Swipe background reveal with Trash icon (only rendered when swiping) */}
+                      {draggingId === notifId && (
+                        <div className="absolute inset-0 bg-rose-500 rounded-2xl flex items-center justify-between px-4 text-white text-xs font-semibold z-0">
+                          <div className="flex items-center gap-1.5">
+                            <Trash2 className="w-4 h-4" />
+                            <span>Remove</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span>Remove</span>
+                            <Trash2 className="w-4 h-4" />
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <span>Remove</span>
-                          <Trash2 className="w-4 h-4" />
-                        </div>
-                      </div>
+                      )}
 
                       <motion.div
                         layout
@@ -273,9 +276,11 @@ export default function NotificationsScreen({
                         dragElastic={{ left: 0.75, right: 0.75 }}
                         onDragStart={() => {
                           isDraggingRef.current = true;
+                          setDraggingId(notifId);
                         }}
                         onDragEnd={(_, info) => {
                           setTimeout(() => { isDraggingRef.current = false; }, 120);
+                          setDraggingId(null);
                           if (Math.abs(info.offset.x) > 85 || Math.abs(info.velocity.x) > 400) {
                             deleteNotification(notifId);
                           }
@@ -284,72 +289,57 @@ export default function NotificationsScreen({
                           if (isDraggingRef.current) return;
                           handleNotificationClick(n);
                         }}
-                        className={`p-3 rounded-2xl border transition-colors cursor-pointer flex items-center gap-3 relative z-10 touch-pan-y ${
-                          n.isUnread 
-                            ? 'bg-[#EEF2FF] border-blue-200 shadow-2xs' 
-                            : 'bg-[#F5F3F3] border-slate-100/90 hover:shadow-xs'
-                        }`}
+                        className="bg-white rounded-2xl p-3.5 border border-slate-100 shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center gap-3 relative z-10 touch-pan-y group"
                       >
-                        {/* Left Sender Avatar (Clean, no sub-badge) */}
-                        <div className="relative shrink-0 self-center">
+                        {/* Left Sender Avatar with Type Badge at bottom-right */}
+                        <div className="relative shrink-0">
                           {senderAvatar && !['/avatar.svg', '/avatar-blue.svg'].includes(senderAvatar) ? (
-                            <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200/80">
-                              <img src={senderAvatar} alt={senderName} className="w-full h-full object-cover" />
-                            </div>
+                            <img 
+                              src={senderAvatar} 
+                              alt={senderName} 
+                              className="w-11 h-11 rounded-full object-cover border border-slate-100" 
+                            />
                           ) : (
-                            <div className={`w-9 h-9 rounded-xl ${n.iconBg} flex items-center justify-center shrink-0 shadow-2xs`}>
-                              <Icon className="w-4 h-4" />
+                            <div className={`w-11 h-11 rounded-full ${n.iconBg} flex items-center justify-center shrink-0 shadow-2xs border border-slate-100`}>
+                              <Icon className="w-5 h-5" />
                             </div>
                           )}
+
+                          {/* Message type badge: Heart for like, Chat for message, etc. */}
+                          <div className={`w-4.5 h-4.5 rounded-full ${n.iconBg} absolute -bottom-1 -right-1 flex items-center justify-center ring-2 ring-white shadow-2xs`}>
+                            <Icon className="w-2.5 h-2.5" />
+                          </div>
                         </div>
 
-                        {/* Content */}
-                        <div className="flex-1 min-w-0 pr-2">
-                          <h3 className="text-xs font-bold text-slate-900 font-sans leading-snug truncate">
+                        {/* Middle Content column */}
+                        <div className="flex-1 min-w-0 pr-1">
+                          <h3 className={`text-xs font-sans truncate ${
+                            n.isUnread ? 'font-bold text-slate-900' : 'font-medium text-slate-700'
+                          }`}>
                             {n.title}
                           </h3>
 
-                          <p className="text-[11px] text-slate-600 font-normal leading-snug mt-0.5 line-clamp-2">
+                          <p className={`text-[11px] truncate mt-1 ${
+                            n.isUnread ? 'text-slate-900 font-semibold' : 'text-slate-500 font-normal'
+                          }`}>
                             {n.message}
                           </p>
-
-                          <div className="mt-1">
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              {n.timeStr}
-                            </span>
-                          </div>
                         </div>
 
-                        {/* Right Product Thumbnail with Action Icon on bottom-right */}
-                        {productImage ? (
-                          <div className="relative shrink-0 self-center">
-                            <div className="w-11 h-11 rounded-xl overflow-hidden bg-white border border-slate-200/80 shadow-2xs">
-                              <img src={productImage} alt="Product" className="w-full h-full object-cover" />
-                            </div>
-                            {/* Action Icon Badge on Bottom-Right of Product Image */}
-                            <div className={`w-4.5 h-4.5 rounded-full ${n.iconBg} absolute -bottom-1 -right-1 flex items-center justify-center ring-2 ring-white shadow-2xs`}>
-                              <Icon className="w-2.5 h-2.5" />
-                            </div>
-                          </div>
-                        ) : (
-                          <div className={`w-8 h-8 rounded-xl ${n.iconBg} flex items-center justify-center shrink-0 self-center shadow-2xs`}>
-                            <Icon className="w-4 h-4" />
-                          </div>
-                        )}
+                        {/* Right Section: Time/Date on top, Ad Image below it */}
+                        <div className="shrink-0 flex flex-col items-center justify-center gap-1 min-w-[44px]">
+                          <span className="text-[8.5px] font-medium text-black leading-tight text-center whitespace-nowrap">
+                            {n.timeStr}
+                          </span>
 
-                        {/* Right Delete Button */}
-                        <button
-                          onClick={(e) => deleteNotification(notifId, e)}
-                          className="w-6 h-6 rounded-full bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center shrink-0 border border-slate-200/60 transition-colors absolute top-2 right-2 opacity-0 group-hover:opacity-100"
-                          title="Delete notification"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-
-                        {/* Unread Indicator Dot */}
-                        {n.isUnread && (
-                          <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#1944F1] ring-2 ring-white" />
-                        )}
+                          {productImage && (
+                            <img 
+                              src={productImage} 
+                              alt="Ad" 
+                              className="w-10 h-10 rounded-xl object-cover border border-slate-100 shadow-2xs" 
+                            />
+                          )}
+                        </div>
                       </motion.div>
                     </div>
                   );
@@ -357,36 +347,14 @@ export default function NotificationsScreen({
               </div>
             ) : (
               /* Empty Notifications State */
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-[#F5F3F3] rounded-3xl p-8 border border-slate-100/90 text-center flex flex-col items-center justify-center space-y-4 my-6"
-              >
-                <div className="w-20 h-20 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-300 shadow-xs relative">
-                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
-                    <path d="M18.7491 9.70957V9.00497C18.7491 5.13623 15.7274 2 12 2C8.27256 2 5.25087 5.13623 5.25087 9.00497V9.70957C5.25087 10.5552 5.00972 11.3818 4.5578 12.0854L3.45036 13.8095C2.43882 15.3843 3.21105 17.5249 4.97036 18.0229C9.57274 19.3257 14.4273 19.3257 19.0296 18.0229C20.789 17.5249 21.5612 15.3843 20.5496 13.8095L19.4422 12.0854C18.9903 11.3818 18.7491 10.5552 18.7491 9.70957Z" stroke="#64748B" strokeWidth="1.8" />
-                    <path d="M7.5 19C8.15503 20.7478 9.92246 22 12 22C14.0775 22 15.845 20.7478 16.5 19" stroke="#64748B" strokeWidth="1.8" strokeLinecap="round" />
-                  </svg>
-                  <Sparkles className="w-5 h-5 text-amber-400 absolute -top-1 -right-1 animate-pulse" />
-                </div>
-
-                <div className="space-y-1 max-w-xs">
-                  <h3 className="text-base font-bold text-slate-900 font-sans">
-                    No Notifications
-                  </h3>
-                  <p className="text-xs text-slate-400 font-normal leading-relaxed">
-                    You are all caught up! New chats, product likes, and campus updates will show up here in real time.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setActiveNav && setActiveNav('home')}
-                  className="px-6 py-2.5 rounded-full bg-[#1944F1] text-white hover:bg-blue-700 text-xs font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  Go to Home
-                </button>
-              </motion.div>
+              <EmptyState
+                type="notifications"
+                title="No Notifications"
+                description="You are all caught up! New chats, product likes, and campus updates will show up here in real time."
+                actionLabel="Go to Home"
+                actionIcon={ShoppingBag}
+                onAction={() => setActiveNav && setActiveNav('home')}
+              />
             )}
           </AnimatePresence>
 

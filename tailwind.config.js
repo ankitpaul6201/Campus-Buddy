@@ -19,7 +19,7 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Outfit', 'Inter', 'sans-serif'],
+        sans: ['"Google Sans"', '"Product Sans"', 'sans-serif'],
       },
       boxShadow: {
         'glow': '0 0 50px -10px rgba(25, 68, 241, 0.6)',

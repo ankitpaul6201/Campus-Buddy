@@ -4,15 +4,17 @@ import {
   Eye, 
   MessageSquare, 
   Heart, 
-  X,
-  Edit3,
-  CheckCircle2,
-  Plus,
-  Bell
+  X, 
+  Edit3, 
+  CheckCircle2, 
+  Plus, 
+  Bell, 
+  ArrowLeft 
 } from 'lucide-react';
+import EmptyState from './EmptyState';
 import { updateProductStatus, fetchMyAds, formatRupeePrice, getAdStats, incrementAdViews, getOptimizedImageUrl, resolveAllUserAds } from '../lib/api';
 
-export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], setUserAds, onNavigateBack, onSelectProduct }) {
+export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], setUserAds, onNavigateBack, onSelectProduct, canGoBack = false }) {
   const [activeFilter, setActiveFilter] = useState('all');
 
   // Helper to reliably find all listings created by the current student across backend & local caches
@@ -95,14 +97,14 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites =
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
-      className="w-full h-full min-h-screen bg-[#F4F6FB] text-slate-900 flex flex-col justify-between overflow-hidden font-sans select-none relative"
+      className="w-full h-full min-h-screen bg-white text-slate-900 flex flex-col justify-between overflow-hidden font-sans select-none relative"
     >
       {/* Scrollable Main Content Container */}
-      <div className="flex-1 overflow-y-auto pb-20 space-y-3 bg-[#F4F6FB] no-scrollbar">
+      <div className="flex-1 overflow-y-auto pb-20 space-y-3 bg-white no-scrollbar">
         
         {/* COMPACT TOP HEADER BAR - BROUGHT DOWN CLEANLY WITH TOP SAFE PADDING */}
         <div className="pt-14 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shadow-2xs shrink-0 z-30">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <img 
               src="/campus-buddy-CB-exact-vector (1).svg" 
               alt="Logo" 
@@ -147,11 +149,11 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites =
           </div>
         </div>
 
-        {/* Page Content Padding Wrapper */}
-        <div className="px-4 space-y-3 pt-1">
+        {/* Page Content Wrapper (No padding around ads list, full-width rows) */}
+        <div className="space-y-3 pt-1">
           
           {/* Page Title */}
-          <div>
+          <div className="px-4">
             <h1 className="text-xl font-bold text-slate-900 font-sans tracking-tight">
               My Ads
             </h1>
@@ -161,13 +163,13 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites =
           </div>
 
           {/* Status Filter Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 px-4">
             <button
               onClick={() => setActiveFilter('all')}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
                 activeFilter === 'all'
                   ? 'bg-[#1944F1] text-white shadow-xs'
-                  : 'bg-white text-slate-700 font-semibold border border-slate-100 hover:bg-slate-50'
+                  : 'bg-[#F5F3F3] text-slate-700 font-medium hover:bg-slate-200/50'
               }`}
             >
               All ({adsList.length})
@@ -178,7 +180,7 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites =
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
                 activeFilter === 'active'
                   ? 'bg-[#1944F1] text-white shadow-xs'
-                  : 'bg-white text-slate-700 font-semibold border border-slate-100 hover:bg-slate-50'
+                  : 'bg-[#F5F3F3] text-slate-700 font-medium hover:bg-slate-200/50'
               }`}
             >
               Active ({activeAds.length})
@@ -189,7 +191,7 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites =
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
                 activeFilter === 'sold'
                   ? 'bg-[#1944F1] text-white shadow-xs'
-                  : 'bg-white text-slate-700 font-semibold border border-slate-100 hover:bg-slate-50'
+                  : 'bg-[#F5F3F3] text-slate-700 font-medium hover:bg-slate-200/50'
               }`}
             >
               Sold ({soldAds.length})
@@ -200,22 +202,22 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites =
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
                 activeFilter === 'drafts'
                   ? 'bg-[#1944F1] text-white shadow-xs'
-                  : 'bg-white text-slate-700 font-semibold border border-slate-100 hover:bg-slate-50'
+                  : 'bg-[#F5F3F3] text-slate-700 font-medium hover:bg-slate-200/50'
               }`}
             >
               Drafts (0)
             </button>
           </div>
 
-          {/* Listings Cards Container */}
-          <div className="space-y-3 pt-0.5">
+          {/* Listings Container (No padding around ads, edge-to-edge rows) */}
+          <div className="divide-y divide-slate-100 border-t border-slate-100">
             {displayedAds.length > 0 ? (
               displayedAds.map((ad) => {
                 const stats = getAdStats(ad, favorites, user?.id || user?._id);
                 return (
                 <div 
                   key={ad._id || ad.id}
-                  className="bg-white rounded-2xl p-3.5 border border-slate-100 shadow-xs flex flex-col space-y-3 hover:shadow-md transition-all"
+                  className="w-full px-4 py-4 flex flex-col space-y-3 hover:bg-slate-50/70 transition-colors"
                 >
                     {/* Top Row: Details Text on the Left, Product Image Thumbnail on the Right */}
                     <div 
@@ -305,25 +307,19 @@ export default function MyAdsScreen({ user, activeNav, setActiveNav, favorites =
                 );
               })
               ) : (
-                <div className="bg-white rounded-2xl p-7 border border-slate-100 text-center flex flex-col items-center justify-center space-y-2.5 my-2 shadow-2xs">
-                  <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-[#1944F1]">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-900">No {activeFilter} listings</h3>
-                  <p className="text-xs text-slate-400 max-w-[220px]">
-                    {activeFilter === 'active' 
-                      ? 'You have not listed any items for sale yet.' 
-                      : `Your ${activeFilter} items will appear here.`}
-                  </p>
-                  {activeFilter === 'active' && (
-                    <button
-                      onClick={() => setActiveNav && setActiveNav('sell')}
-                      className="mt-1 px-4 py-2 rounded-full bg-[#1944F1] text-white text-xs font-bold shadow-xs hover:bg-blue-700 transition-all flex items-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Post an Ad
-                    </button>
-                  )}
+                <div className="px-4 py-8">
+                  <EmptyState
+                    type="ads"
+                    title={activeFilter === 'all' ? 'No Listings Here' : `No ${activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1)} Listings`}
+                    description={
+                      activeFilter === 'active' || activeFilter === 'all'
+                        ? 'You have not listed any items for sale yet. Turn your unused textbooks or gear into cash!' 
+                        : `Your ${activeFilter} items will be shown here.`
+                    }
+                    actionLabel={activeFilter === 'active' || activeFilter === 'all' ? 'Post an Ad' : null}
+                    actionIcon={Plus}
+                    onAction={() => setActiveNav && setActiveNav('sell')}
+                  />
                 </div>
               )}
           </div>

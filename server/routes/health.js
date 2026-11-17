@@ -15,33 +15,39 @@ router.get('/', (req, res) => {
   });
 });
 
-// Diagnostic check to verify if email environment variables are loaded on Render
+// Diagnostic check to verify if email service is configured safely
 router.get('/email-status', (req, res) => {
   const user = process.env.EMAIL_USER || process.env.SMTP_USER || '';
   const pass = process.env.EMAIL_PASS || process.env.SMTP_PASS || '';
-  const resend = process.env.RESEND_API_KEY || '';
 
   res.json({
     emailConfigured: Boolean(user && pass),
-    emailUser: user ? user.slice(0, 3) + '***@' + user.split('@')[1] : null,
-    hasPassword: Boolean(pass),
-    hasResend: Boolean(resend)
+    provider: 'smtp'
   });
 });
 
-// Test email delivery directly from Render and return raw error/success
+// Diagnostic email delivery - restricted to non-production only to eliminate open relay abuse
 router.get('/test-email', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: 'Diagnostic endpoint disabled in production.' });
+  }
+
   const emailService = require('../services/emailService');
-  const targetEmail = req.query.to || 'ankitpaul6201@gmail.com';
+  const configuredUser = process.env.EMAIL_USER;
+  if (!configuredUser) {
+    return res.status(500).json({ error: 'EMAIL_USER is not configured.' });
+  }
+
+  // Restrict destination strictly to configured sender to eliminate open relay abuse
   try {
     const result = await emailService.sendVerificationCode({
-      to: targetEmail,
+      to: configuredUser,
       code: '777888',
-      name: 'Ankit Test'
+      name: 'Diagnostic Test'
     });
-    res.json({ success: true, result });
+    res.json({ success: true, message: 'Diagnostic test email dispatched successfully' });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message, stack: err.stack });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

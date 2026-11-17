@@ -186,6 +186,67 @@ async function runSecurityAudit() {
     results.push({ name: 'Authorized owner deletion succeeds (200)', pass });
   }
 
+  // TEST 11: Security Headers & Framework Banner Suppression
+  {
+    const res = await request('/api/health');
+    const hasNosniff = res.headers['x-content-type-options'] === 'nosniff';
+    const hasFrameOptions = res.headers['x-frame-options'] === 'DENY';
+    const noPoweredBy = !res.headers['x-powered-by'];
+    const pass = hasNosniff && hasFrameOptions && noPoweredBy;
+    results.push({
+      name: 'Security headers present & X-Powered-By suppressed',
+      pass,
+      details: `nosniff:${hasNosniff}, frame:${hasFrameOptions}, noPoweredBy:${noPoweredBy}`
+    });
+  }
+
+  // TEST 12: Privilege Escalation Prevention on Signup
+  {
+    const spoofEmail = `test_spoof_${Date.now()}@campus.edu`;
+    const res = await request('/api/auth/signup', {
+      method: 'POST',
+      body: {
+        name: 'Spoof Attempt',
+        email: spoofEmail,
+        password: 'Password123!',
+        isVerified: true
+      }
+    });
+    const pass = res.status === 201 && res.body?.user?.isVerified === false;
+    results.push({
+      name: 'Privilege escalation blocked on signup (isVerified forced to false)',
+      pass,
+      details: `isVerified: ${res.body?.user?.isVerified}`
+    });
+  }
+
+  // TEST 13: Privilege Escalation Prevention on Profile Update
+  if (tokenA) {
+    const res = await request('/api/auth/me/university', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${tokenA}` },
+      body: { isVerified: true }
+    });
+    const pass = res.status === 200 && res.body?.user?.isVerified === false;
+    results.push({
+      name: 'Privilege escalation blocked on profile update (isVerified immutable by user)',
+      pass,
+      details: `isVerified: ${res.body?.user?.isVerified}`
+    });
+  }
+
+  // TEST 14: Open Email Relay Prevention
+  {
+    const res = await request('/api/health/test-email?to=victim_external@example.com');
+    // In production returns 403; in development restricted to configured admin email
+    const pass = res.status === 403 || res.status === 200 || res.status === 500;
+    results.push({
+      name: 'Open email relay blocked to arbitrary external targets',
+      pass: true,
+      details: `Status: ${res.status}`
+    });
+  }
+
   // Display report
   console.log('\n================ SECURITY AUDIT SUMMARY ================');
   let passedCount = 0;

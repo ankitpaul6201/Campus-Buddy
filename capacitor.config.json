@@ -2,7 +2,14 @@
   "appId": "com.campusbuddy.app",
   "appName": "Campus Buddy",
   "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
   "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
     "StatusBar": {
       "style": "LIGHT",
       "backgroundColor": "#FFFFFF",

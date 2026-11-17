@@ -1,18 +1,63 @@
 // Campus Buddy Frontend API Client
 // Traditional JWT Authentication directly with MongoDB Atlas
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
 const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  if (Capacitor.isNativePlatform()) {
-    return 'http://10.207.19.187:5000/api';
-  }
-  return 'http://localhost:5000/api';
+  return 'http://52.62.63.200:5000/api';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
+
+// ─── Native HTTP Bridge ───────────────────────────────────────────────────
+// Routes requests via Android Native OkHttp on devices to bypass WebView restrictions
+const customFetch = async (url, options = {}) => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const method = (options.method || 'GET').toUpperCase();
+      let data = undefined;
+      if (options.body) {
+        if (typeof options.body === 'string') {
+          try {
+            data = JSON.parse(options.body);
+          } catch {
+            data = options.body;
+          }
+        } else {
+          data = options.body;
+        }
+      }
+
+      const res = await CapacitorHttp.request({
+        url,
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+        data,
+      });
+
+      return {
+        ok: res.status >= 200 && res.status < 300,
+        status: res.status,
+        statusText: String(res.status),
+        json: async () => (typeof res.data === 'string' ? JSON.parse(res.data) : res.data),
+        text: async () => (typeof res.data === 'string' ? res.data : JSON.stringify(res.data)),
+        headers: {
+          get: (h) => (res.headers ? res.headers[h.toLowerCase()] || res.headers[h] : null),
+        },
+      };
+    } catch (nativeErr) {
+      console.warn('[Native HTTP Error, trying web fetch]:', nativeErr);
+    }
+  }
+  return window.fetch(url, options);
+};
+
+const fetch = customFetch;
 
 // ─── Token Helpers ─────────────────────────────────────────────────────────
 
@@ -884,7 +929,13 @@ export async function fetchMessages(conversationId) {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        return await res.json();
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          try {
+            localStorage.setItem(`campus_messages_cache_${conversationId}`, JSON.stringify(data));
+          } catch {}
+        }
+        return data;
       }
     }
   } catch (err) {
@@ -892,6 +943,8 @@ export async function fetchMessages(conversationId) {
   }
 
   try {
+    const cached = JSON.parse(localStorage.getItem(`campus_messages_cache_${conversationId}`) || '[]');
+    if (Array.isArray(cached) && cached.length > 0) return cached;
     const convs = JSON.parse(localStorage.getItem('campus_conversations_cache') || '[]');
     const target = convs.find(c => (c._id || c.id) === conversationId);
     return target?.messages || [];
@@ -1179,7 +1232,155 @@ export function getAdStats(ad, favorites = [], currentUserId = null) {
   return { views, likes, chats };
 }
 
+// ─── Student Profile & Seller Information API ──────────────────────────────
+
+/**
+ * Fetch public student information (phone number, course, year, dob) directly from student section API
+ */
+export async function fetchStudentProfile(studentId) {
+  if (!studentId) return null;
+  const key = String(studentId);
+
+  // If requesting current user's profile, return stored user
+  const storedUser = getStoredUser();
+  const myId = String(storedUser?._id || storedUser?.id || '');
+  if (myId && (key === myId || key === 'me')) {
+    return {
+      _id: myId,
+      id: myId,
+      fullName: (typeof window !== 'undefined' ? localStorage.getItem('user_custom_fullname') : null) || storedUser?.fullName || storedUser?.name,
+      phone: (typeof window !== 'undefined' ? localStorage.getItem('user_phone') : null) || storedUser?.phone || '',
+      universityName: storedUser?.universityName || 'Campus Member',
+      avatar: (typeof window !== 'undefined' ? localStorage.getItem('user_custom_avatar') : null) || storedUser?.avatar,
+      isVerified: Boolean(storedUser?.isVerified),
+      course: (typeof window !== 'undefined' ? localStorage.getItem('user_course') : null) || storedUser?.course || '',
+      year: (typeof window !== 'undefined' ? localStorage.getItem('user_year') : null) || storedUser?.year || '',
+      dob: (typeof window !== 'undefined' ? localStorage.getItem('user_dob') : null) || storedUser?.dob || ''
+    };
+  }
+
+  const cacheKey = `student_profile_${key}`;
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/student/${key}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data) {
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch {}
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend student profile fetch offline:', err);
+  }
+
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch {}
+
+  return null;
+}
+
 // ─── Student Seller Ratings & Reviews System ──────────────────────────────
+
+export const RATING_DESCRIPTION_MAP = {
+  5: 'Outstanding Experience (5/5)',
+  4: 'Very Good & Reliable (4/5)',
+  3: 'Good & As Described (3/5)',
+  2: 'Fair / Minor Issues (2/5)',
+  1: 'Needs Improvement (1/5)'
+};
+
+export function getRatingLabel(rating) {
+  return RATING_DESCRIPTION_MAP[Math.round(Number(rating))] || `${rating}/5 Stars`;
+}
+
+export function hasUserRatedSeller(sellerId, userId, sellerRatingsData = null) {
+  if (!sellerId) return false;
+  const key = String(sellerId);
+  const storedUser = getStoredUser();
+  const uId = String(userId || storedUser?._id || storedUser?.id || '').trim();
+  const uEmail = String(storedUser?.email || '').trim().toLowerCase();
+  const uName = String(storedUser?.fullName || storedUser?.name || (typeof window !== 'undefined' ? localStorage.getItem('user_custom_fullname') : '') || '').trim().toLowerCase();
+
+  try {
+    // 1. Check in seller reviews data (from API or local cache)
+    const data = sellerRatingsData || getSellerRatings(sellerId);
+    if (data && Array.isArray(data.reviews)) {
+      const match = data.reviews.some(r => {
+        const rRevId = String(r.reviewerId || (r.reviewer ? (r.reviewer._id || r.reviewer) : '') || '').trim();
+        const rEmail = String(r.reviewerEmail || (r.reviewer && r.reviewer.email) || '').trim().toLowerCase();
+        const rName = String(r.name || r.reviewerName || '').trim().toLowerCase();
+
+        if (uId && rRevId && rRevId === uId) return true;
+        if (uEmail && rEmail && rEmail === uEmail) return true;
+        if (uName && rName && (rName === uName || uName.includes(rName) || rName.includes(uName))) return true;
+        return false;
+      });
+      if (match) return true;
+    }
+
+    // 2. Check persistent map of rated sellers in localStorage
+    const ratedMap = JSON.parse(localStorage.getItem('campus_rated_sellers') || '{}');
+    if (uId && ratedMap[`${uId}_${key}`]) return true;
+    if (uEmail && ratedMap[`${uEmail}_${key}`]) return true;
+    if (ratedMap[`guest_${key}`]) return true;
+  } catch {}
+
+  return false;
+}
+
+export function getUserReviewForSeller(sellerId, userId, sellerRatingsData = null) {
+  if (!sellerId) return null;
+  const key = String(sellerId);
+  const storedUser = getStoredUser();
+  const uId = String(userId || storedUser?._id || storedUser?.id || '').trim();
+  const uEmail = String(storedUser?.email || '').trim().toLowerCase();
+  const uName = String(storedUser?.fullName || storedUser?.name || (typeof window !== 'undefined' ? localStorage.getItem('user_custom_fullname') : '') || '').trim().toLowerCase();
+
+  try {
+    const data = sellerRatingsData || getSellerRatings(sellerId);
+    if (data && Array.isArray(data.reviews)) {
+      const match = data.reviews.find(r => {
+        const rRevId = String(r.reviewerId || (r.reviewer ? (r.reviewer._id || r.reviewer) : '') || '').trim();
+        const rEmail = String(r.reviewerEmail || (r.reviewer && r.reviewer.email) || '').trim().toLowerCase();
+        const rName = String(r.name || r.reviewerName || '').trim().toLowerCase();
+
+        if (uId && rRevId && rRevId === uId) return true;
+        if (uEmail && rEmail && rEmail === uEmail) return true;
+        if (uName && rName && (rName === uName || uName.includes(rName) || rName.includes(uName))) return true;
+        return false;
+      });
+      if (match) {
+        return {
+          ...match,
+          rating: Number(match.rating) || 5,
+          ratingDescription: match.ratingDescription || getRatingLabel(match.rating),
+          comment: match.comment || '',
+          date: match.date || 'Your Previous Rating'
+        };
+      }
+    }
+
+    const ratedMap = JSON.parse(localStorage.getItem('campus_rated_sellers') || '{}');
+    const local = (uId && ratedMap[`${uId}_${key}`]) ||
+                  (uEmail && ratedMap[`${uEmail}_${key}`]) ||
+                  ratedMap[`guest_${key}`];
+    if (local) {
+      return {
+        ...local,
+        rating: Number(local.rating) || 5,
+        ratingDescription: local.ratingDescription || getRatingLabel(local.rating),
+        comment: local.comment || '',
+        date: local.date ? 'Your Previous Rating' : 'Recently'
+      };
+    }
+  } catch {}
+
+  return null;
+}
 
 export function getSellerRatings(sellerId) {
   if (!sellerId) {
@@ -1190,17 +1391,34 @@ export function getSellerRatings(sellerId) {
   try {
     const map = JSON.parse(localStorage.getItem('campus_seller_ratings') || '{}');
     if (map[key] && Array.isArray(map[key].reviews)) {
-      // Filter out any legacy dummy reviews (Sarah Jenkins, Rahul K., Maya Lin)
+      // 1. Filter out legacy dummy reviews
       const realOnly = map[key].reviews.filter(r => 
         !['rev_1', 'rev_2', 'rev_3'].includes(r.id) &&
         r.name !== 'Sarah Jenkins' &&
         r.name !== 'Rahul K.' &&
         r.name !== 'Maya Lin'
-      );
-      if (realOnly.length > 0) {
-        const totalStars = realOnly.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
-        const avg = Number((totalStars / realOnly.length).toFixed(1));
-        return { average: avg, count: realOnly.length, reviews: realOnly };
+      ).map(r => ({
+        ...r,
+        reviewerId: r.reviewerId || (r.reviewer ? String(r.reviewer) : null),
+        ratingDescription: r.ratingDescription || getRatingLabel(r.rating)
+      }));
+
+      // 2. Deduplicate reviews so each reviewer has at most 1 review
+      const seenReviewers = new Set();
+      const dedupedReviews = [];
+      for (const r of realOnly) {
+        const revKey = String(r.reviewerId || r.reviewer || r.reviewerEmail || r.name || '').trim().toLowerCase();
+        if (revKey && revKey !== 'verified student' && revKey !== 'student') {
+          if (seenReviewers.has(revKey)) continue; // Skip duplicate!
+          seenReviewers.add(revKey);
+        }
+        dedupedReviews.push(r);
+      }
+
+      if (dedupedReviews.length > 0) {
+        const totalStars = dedupedReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
+        const avg = Number((totalStars / dedupedReviews.length).toFixed(1));
+        return { average: avg, count: dedupedReviews.length, reviews: dedupedReviews };
       }
     }
   } catch {}
@@ -1208,9 +1426,98 @@ export function getSellerRatings(sellerId) {
   return { average: 0, count: 0, reviews: [] };
 }
 
-export function submitSellerRating(sellerId, { rating, comment, reviewerName }) {
+export async function fetchSellerRatingsFromApi(sellerId) {
+  if (!sellerId) return { average: 0, count: 0, reviews: [] };
+  const key = String(sellerId);
+
+  if (/^[0-9a-fA-F]{24}$/.test(key)) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/seller/${key}/ratings`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.reviews)) {
+          // Normalize and deduplicate reviews
+          const seenReviewers = new Set();
+          const cleanReviews = [];
+
+          for (const r of data.reviews) {
+            const revKey = String(r.reviewerId || (r.reviewer ? (r.reviewer._id || r.reviewer) : '') || r.reviewerEmail || r.name || '').trim().toLowerCase();
+            if (revKey && revKey !== 'verified student' && revKey !== 'student') {
+              if (seenReviewers.has(revKey)) continue;
+              seenReviewers.add(revKey);
+            }
+            cleanReviews.push({
+              id: String(r.id || r._id || ('rev_' + Math.random())),
+              reviewerId: r.reviewerId || (r.reviewer ? String(r.reviewer._id || r.reviewer) : null),
+              reviewerEmail: r.reviewerEmail || (r.reviewer && r.reviewer.email ? String(r.reviewer.email) : null),
+              name: r.name || r.reviewerName || 'Verified Student',
+              rating: Number(r.rating) || 5,
+              ratingDescription: r.ratingDescription || getRatingLabel(r.rating),
+              comment: r.comment || '',
+              date: r.date || 'Recently'
+            });
+          }
+
+          const totalStars = cleanReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
+          const avg = cleanReviews.length > 0 ? Number((totalStars / cleanReviews.length).toFixed(1)) : 0;
+          const cleanData = {
+            average: avg,
+            count: cleanReviews.length,
+            reviews: cleanReviews
+          };
+
+          try {
+            const map = JSON.parse(localStorage.getItem('campus_seller_ratings') || '{}');
+            map[key] = cleanData;
+            localStorage.setItem('campus_seller_ratings', JSON.stringify(map));
+
+            // Sync user's review into local campus_rated_sellers map
+            const storedUser = getStoredUser();
+            const uId = String(storedUser?._id || storedUser?.id || '').trim();
+            const uEmail = String(storedUser?.email || '').trim().toLowerCase();
+            const uName = String(storedUser?.fullName || storedUser?.name || '').trim().toLowerCase();
+
+            const myRev = cleanReviews.find(r => {
+              if (uId && r.reviewerId && r.reviewerId === uId) return true;
+              if (uEmail && r.reviewerEmail && r.reviewerEmail === uEmail) return true;
+              if (uName && r.name && r.name.toLowerCase() === uName) return true;
+              return false;
+            });
+
+            if (myRev) {
+              const ratedMap = JSON.parse(localStorage.getItem('campus_rated_sellers') || '{}');
+              const trackingKey = (uId || uEmail || 'guest') + '_' + key;
+              ratedMap[trackingKey] = {
+                rating: myRev.rating,
+                ratingDescription: myRev.ratingDescription,
+                comment: myRev.comment,
+                date: myRev.date
+              };
+              localStorage.setItem('campus_rated_sellers', JSON.stringify(ratedMap));
+            }
+          } catch {}
+
+          return cleanData;
+        }
+      }
+    } catch (err) {
+      console.warn('Backend fetch ratings offline, using local store:', err);
+    }
+  }
+
+  return getSellerRatings(sellerId);
+}
+
+export async function submitSellerRating(sellerId, { rating, comment, reviewerName, ratingDescription, reviewerId, reviewerEmail }) {
   if (!sellerId || !rating) return null;
   const key = String(sellerId);
+  const storedUser = getStoredUser();
+  const currentReviewerId = String(reviewerId || storedUser?._id || storedUser?.id || '').trim();
+  const currentReviewerEmail = String(reviewerEmail || storedUser?.email || '').trim().toLowerCase();
+
+  const numericRating = Math.min(5, Math.max(1, Number(rating) || 5));
+  const desc = ratingDescription || getRatingLabel(numericRating);
+  const reviewComment = (comment && comment.trim()) || desc;
 
   try {
     const map = JSON.parse(localStorage.getItem('campus_seller_ratings') || '{}');
@@ -1218,13 +1525,28 @@ export function submitSellerRating(sellerId, { rating, comment, reviewerName }) 
 
     const newRev = {
       id: 'rev_' + Date.now(),
-      name: (reviewerName || 'Verified Student').trim(),
-      rating: Math.min(5, Math.max(1, Number(rating) || 5)),
-      comment: (comment || 'Recommended student seller! Genuine item and great communication.').trim(),
+      reviewerId: currentReviewerId || null,
+      reviewerEmail: currentReviewerEmail || null,
+      name: (reviewerName || storedUser?.fullName || 'Verified Student').trim(),
+      rating: numericRating,
+      ratingDescription: desc,
+      comment: reviewComment,
       date: 'Just now'
     };
 
-    const updatedReviews = [newRev, ...(existing.reviews || [])];
+    // Filter out any prior review from the same reviewer so duplicates are NEVER created!
+    const filteredReviews = (existing.reviews || []).filter(r => {
+      const rRevId = String(r.reviewerId || (r.reviewer ? (r.reviewer._id || r.reviewer) : '') || '').trim();
+      const rEmail = String(r.reviewerEmail || '').trim().toLowerCase();
+      const rName = String(r.name || r.reviewerName || '').trim().toLowerCase();
+
+      if (currentReviewerId && rRevId && rRevId === currentReviewerId) return false;
+      if (currentReviewerEmail && rEmail && rEmail === currentReviewerEmail) return false;
+      if (newRev.name && rName && rName === newRev.name.toLowerCase()) return false;
+      return true;
+    });
+
+    const updatedReviews = [newRev, ...filteredReviews];
     const totalStars = updatedReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
     const avg = Number((totalStars / updatedReviews.length).toFixed(1));
 
@@ -1236,6 +1558,58 @@ export function submitSellerRating(sellerId, { rating, comment, reviewerName }) 
 
     map[key] = updatedData;
     localStorage.setItem('campus_seller_ratings', JSON.stringify(map));
+
+    // Record that this buyer has rated this seller
+    try {
+      const ratedMap = JSON.parse(localStorage.getItem('campus_rated_sellers') || '{}');
+      const trackingKey = (currentReviewerId || currentReviewerEmail || 'guest') + '_' + key;
+      ratedMap[trackingKey] = {
+        rating: numericRating,
+        ratingDescription: desc,
+        comment: reviewComment,
+        date: new Date().toISOString()
+      };
+      localStorage.setItem('campus_rated_sellers', JSON.stringify(ratedMap));
+    } catch {}
+
+    // Persist to backend MongoDB if sellerId is a valid ObjectId and token exists
+    const token = getAuthToken();
+    if (token && /^[0-9a-fA-F]{24}$/.test(key)) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/seller/${key}/rating`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            rating: numericRating,
+            ratingDescription: desc,
+            comment: reviewComment,
+            reviewerName: newRev.name
+          })
+        });
+
+        if (res.ok) {
+          const serverData = await res.json();
+          if (serverData && Array.isArray(serverData.reviews)) {
+            map[key] = {
+              average: serverData.average || avg,
+              count: serverData.count || updatedReviews.length,
+              reviews: serverData.reviews
+            };
+            localStorage.setItem('campus_seller_ratings', JSON.stringify(map));
+          }
+        }
+      } catch (err) {
+        console.warn('Backend rating sync error:', err);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('seller-rating-updated', { detail: { sellerId: key, data: updatedData } }));
+    }
+
     return updatedData;
   } catch {
     return null;

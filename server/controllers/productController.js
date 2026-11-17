@@ -4,11 +4,11 @@ const cacheService = require('../cache/cacheService');
 const { createAndSendNotification } = require('../services/notificationService');
 const cloudinary = require('cloudinary').v2;
 
-// Configure Cloudinary from environment with secure fallback credentials
+// Configure Cloudinary explicitly from environment variables
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'admrhw6j',
-  api_key: process.env.CLOUDINARY_API_KEY || '257446998439911',
-  api_secret: process.env.CLOUDINARY_API_SECRET || 'GSM8XHIi7qXJL9xPyHwfGs0eioA'
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 /**
@@ -26,9 +26,9 @@ async function getProducts(req, res, next) {
     // Stampede-protected cache lookup (30-second TTL) with cold-cache bypass support
     const result = await cacheService.getOrFetch(cacheKey, async () => {
       const filter = {};
-      if (status && status !== 'all') filter.status = status;
-      if (seller) filter.seller = seller;
-      if (category && category !== 'all') filter.category = category;
+      if (typeof status === 'string' && status !== 'all') filter.status = String(status).slice(0, 50);
+      if (typeof seller === 'string') filter.seller = String(seller).slice(0, 50);
+      if (typeof category === 'string' && category !== 'all') filter.category = String(category).slice(0, 50);
 
       // Efficient University / Campus filtering
       const uniQuery = (university || campus || '').trim();
@@ -48,7 +48,7 @@ async function getProducts(req, res, next) {
 
       let query = Product.find(filter)
         .select('title description price category condition images seller campusName universityName location phone contactNumber status createdAt')
-        .populate('seller', 'fullName avatar universityName isVerified email phone')
+        .populate('seller', 'fullName avatar universityName isVerified email phone course year dob createdAt ratings ratingAverage ratingCount')
         .sort({ createdAt: -1 })
         .limit(pageSize + 1)
         .lean();
@@ -98,7 +98,7 @@ async function getMyAds(req, res, next) {
     const products = await cacheService.getOrFetch(cacheKey, async () => {
       return Product.find({ seller: userId })
         .select('title description price category condition images seller campusName universityName location phone contactNumber status createdAt')
-        .populate('seller', 'fullName avatar universityName isVerified email phone')
+        .populate('seller', 'fullName avatar universityName isVerified email phone course year dob createdAt ratings ratingAverage ratingCount')
         .sort({ createdAt: -1 })
         .lean();
     }, 15);
@@ -121,7 +121,7 @@ async function getProductById(req, res, next) {
     const product = await cacheService.getOrFetch(cacheKey, async () => {
       return Product.findById(productId)
         .select('title description price category condition images seller campusName universityName location phone contactNumber status createdAt updatedAt')
-        .populate('seller', 'fullName avatar universityName isVerified email phone createdAt')
+        .populate('seller', 'fullName avatar universityName isVerified email phone course year dob createdAt ratings ratingAverage ratingCount')
         .lean();
     }, 60);
 
@@ -172,7 +172,7 @@ async function createProduct(req, res, next) {
     const rawContactPhone = (phone || contactNumber || phoneNumber || userDoc?.phone || '').toString().replace(/\D/g, '');
     const cleanPhone = rawContactPhone.length >= 10 ? rawContactPhone.slice(-10) : '';
     if (!cleanPhone || cleanPhone.length !== 10) {
-      return res.status(400).json({ error: 'Phone number must have exactly 10 digits' });
+      return res.status(400).json({ error: 'Please save your 10-digit phone number in your Student Profile before creating a listing' });
     }
 
     // Sync phone back to user account if missing or updated
@@ -198,7 +198,11 @@ async function createProduct(req, res, next) {
           processedImages.push(img);
         }
       } else if (typeof img === 'string' && img.trim()) {
-        processedImages.push(img.trim());
+        const cleanImg = img.trim();
+        // Restrict image schemes to prevent javascript: or data exfiltration URLs
+        if (cleanImg.startsWith('http://') || cleanImg.startsWith('https://') || cleanImg.startsWith('/')) {
+          processedImages.push(cleanImg);
+        }
       }
     }
 
@@ -256,7 +260,7 @@ async function updateProductStatus(req, res, next) {
       { status },
       { new: true }
     )
-      .populate('seller', 'fullName avatar universityName isVerified email phone')
+      .populate('seller', 'fullName avatar universityName isVerified email phone course year dob createdAt ratings ratingAverage ratingCount')
       .lean();
 
     if (!product) {

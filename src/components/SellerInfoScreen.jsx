@@ -6,9 +6,19 @@ import {
   GraduationCap,
   Send,
   MessageSquare,
-  Award
+  Award,
+  Phone,
+  CheckCircle2
 } from 'lucide-react';
-import { formatRupeePrice, getSellerRatings, submitSellerRating } from '../lib/api';
+import { 
+  formatRupeePrice, 
+  getSellerRatings, 
+  submitSellerRating, 
+  fetchStudentProfile, 
+  fetchSellerRatingsFromApi,
+  hasUserRatedSeller,
+  getUserReviewForSeller
+} from '../lib/api';
 
 // Student ID Card SVG provided by the user
 function StudentIdCardSvg({ className = "w-4 h-4 fill-current" }) {
@@ -100,12 +110,81 @@ export default function SellerInfoScreen({
   }, []);
 
   const [sellerRatingData, setSellerRatingData] = useState(() => getSellerRatings(targetSellerKey));
-  const [userRating, setUserRating] = useState(5);
-  const [userComment, setUserComment] = useState('');
-  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [sellerStudentInfo, setSellerStudentInfo] = useState(null);
 
+  // Retrieve user's previous review (if any) across devices / local storage
+  const userReviewRecord = getUserReviewForSeller(targetSellerKey, currentUserId, sellerRatingData);
+  const [userRating, setUserRating] = useState(() => Number(userReviewRecord?.rating) || 5);
+  const [userComment, setUserComment] = useState(() => userReviewRecord?.comment || '');
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [hasRated, setHasRated] = useState(() => Boolean(userReviewRecord || hasUserRatedSeller(targetSellerKey, currentUserId, sellerRatingData)));
+
+  const isAlreadyRated = Boolean(hasRated || userReviewRecord);
+
+  const ratingDescriptionMap = {
+    5: '🌟 Outstanding Experience (5/5)',
+    4: '⭐ Very Good & Reliable (4/5)',
+    3: '⭐ Good & As Described (3/5)',
+    2: '⭐ Fair / Minor Issues (2/5)',
+    1: '⭐ Needs Improvement (1/5)'
+  };
+  const activeRatingDesc = ratingDescriptionMap[userRating] || `${userRating}/5 Stars`;
+
+  // Fetch fresh seller profile from student information API
   useEffect(() => {
-    setSellerRatingData(getSellerRatings(targetSellerKey));
+    let isMounted = true;
+    const targetUserId = sellerId && /^[0-9a-fA-F]{24}$/.test(sellerId) ? sellerId : null;
+    if (targetUserId && targetUserId !== currentUserId) {
+      fetchStudentProfile(targetUserId).then(profile => {
+        if (isMounted && profile) {
+          setSellerStudentInfo(profile);
+        }
+      }).catch(() => {});
+    }
+    return () => { isMounted = false; };
+  }, [sellerId, currentUserId]);
+
+  // Fetch latest ratings from MongoDB or local storage and automatically sync user's previous review
+  useEffect(() => {
+    let isMounted = true;
+    const initial = getSellerRatings(targetSellerKey);
+    setSellerRatingData(initial);
+    const initialRev = getUserReviewForSeller(targetSellerKey, currentUserId, initial);
+    if (initialRev) {
+      setHasRated(true);
+      setUserRating(Number(initialRev.rating) || 5);
+      setUserComment(initialRev.comment || '');
+    }
+
+    fetchSellerRatingsFromApi(targetSellerKey).then(data => {
+      if (isMounted && data) {
+        setSellerRatingData(data);
+        const serverRev = getUserReviewForSeller(targetSellerKey, currentUserId, data);
+        if (serverRev) {
+          setHasRated(true);
+          setUserRating(Number(serverRev.rating) || 5);
+          setUserComment(serverRev.comment || '');
+        }
+      }
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, [targetSellerKey, currentUserId]);
+
+  // Live real-time sync when a rating is submitted
+  useEffect(() => {
+    const handleRatingSync = (e) => {
+      if (e?.detail?.sellerId === targetSellerKey && e.detail.data) {
+        setSellerRatingData(e.detail.data);
+      } else {
+        setSellerRatingData(getSellerRatings(targetSellerKey));
+      }
+    };
+    window.addEventListener('seller-rating-updated', handleRatingSync);
+    window.addEventListener('storage', handleRatingSync);
+    return () => {
+      window.removeEventListener('seller-rating-updated', handleRatingSync);
+      window.removeEventListener('storage', handleRatingSync);
+    };
   }, [targetSellerKey]);
 
   // Calculate actual ads posted by this seller
@@ -154,19 +233,19 @@ export default function SellerInfoScreen({
   const resolvedSellerCourse = (
     isMyListing
       ? (user?.course || (typeof window !== 'undefined' ? (localStorage.getItem('user_course') || localStorage.getItem('pending_course')) : '') || sellerObj.sellerCourse || sellerObj.course || '')
-      : (sellerObj.sellerCourse || sellerObj.course || '')
+      : (sellerStudentInfo?.course || sellerObj.sellerCourse || sellerObj.course || '')
   ).trim();
 
   const resolvedSellerYear = (
     isMyListing
       ? (user?.year || (typeof window !== 'undefined' ? (localStorage.getItem('user_year') || localStorage.getItem('pending_year')) : '') || sellerObj.sellerYear || sellerObj.year || '')
-      : (sellerObj.sellerYear || sellerObj.year || '')
+      : (sellerStudentInfo?.year || sellerObj.sellerYear || sellerObj.year || '')
   ).trim();
 
   const resolvedSellerDob = (
     isMyListing
       ? (user?.dob || (typeof window !== 'undefined' ? (localStorage.getItem('user_dob') || localStorage.getItem('pending_dob')) : '') || sellerObj.sellerDob || sellerObj.dob || '')
-      : (sellerObj.sellerDob || sellerObj.dob || '')
+      : (sellerStudentInfo?.dob || sellerObj.sellerDob || sellerObj.dob || '')
   );
 
   // Calculate age from DOB
@@ -183,18 +262,38 @@ export default function SellerInfoScreen({
   const sellerAgeNumber = calculateAge(resolvedSellerDob);
   const sellerAgeFormatted = sellerAgeNumber ? `${sellerAgeNumber} Years` : 'Not specified';
 
-  const handleRatingSubmit = (e) => {
+  // Resolve seller phone number from student section
+  const sellerPhoneNumber = (() => {
+    if (isMyListing) {
+      const myPhone = user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('user_phone') : '');
+      const uDigits = String(myPhone || '').replace(/\D/g, '');
+      return uDigits.length >= 10 ? uDigits.slice(-10) : '';
+    }
+    const raw = sellerStudentInfo?.phone || sellerObj.sellerPhone || sellerObj.phone || '';
+    const digits = String(raw).replace(/\D/g, '');
+    return digits.length >= 10 ? digits.slice(-10) : '';
+  })();
+
+  const handleRatingSubmit = async (e) => {
     if (e) e.preventDefault();
-    const reviewerName = currentUserName ? (user?.fullName || user?.name || 'Verified Student') : 'Verified Student';
-    const updated = submitSellerRating(targetSellerKey, {
+    if (isAlreadyRated) return;
+
+    const currentUserName = (user?.fullName || user?.name || (typeof window !== 'undefined' ? localStorage.getItem('user_custom_fullname') : '') || '').trim();
+    const reviewerName = currentUserName || 'Verified Student';
+    const ratingDescription = activeRatingDesc;
+
+    const updated = await submitSellerRating(targetSellerKey, {
       rating: userRating,
+      ratingDescription,
       comment: userComment,
-      reviewerName
+      reviewerName,
+      reviewerId: currentUserId,
+      reviewerEmail: currentUserEmail
     });
     if (updated) {
       setSellerRatingData(updated);
       setRatingSubmitted(true);
-      setUserComment('');
+      setHasRated(true);
       setTimeout(() => setRatingSubmitted(false), 4500);
     }
   };
@@ -384,6 +483,37 @@ export default function SellerInfoScreen({
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 text-center text-xs text-slate-500 font-medium leading-relaxed">
               This is your own seller profile. Fellow students can rate you after campus transactions.
             </div>
+          ) : isAlreadyRated ? (
+            <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-2.5 animate-fade-in">
+              <div className="flex items-center gap-1.5 text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="text-xs font-bold">You have rated this seller</span>
+              </div>
+
+              {userReviewRecord ? (
+                <div className="bg-white/95 p-3 rounded-xl border border-emerald-100/90 space-y-2 shadow-2xs">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-0.5 text-amber-400">
+                      {[...Array(Number(userReviewRecord.rating) || userRating || 5)].map((_, i) => (
+                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400" />
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200">
+                      {userReviewRecord.ratingDescription || ratingDescriptionMap[userReviewRecord.rating] || `${userReviewRecord.rating || 5}/5 Stars`}
+                    </span>
+                  </div>
+                  {userReviewRecord.comment && (
+                    <p className="text-xs text-slate-700 font-normal leading-relaxed break-words bg-slate-50/60 p-2 rounded-lg border border-slate-100">
+                      "{userReviewRecord.comment}"
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-emerald-700 font-medium">
+                  Your rating has been recorded and contributed to this seller's campus reputation score.
+                </p>
+              )}
+            </div>
           ) : (
             <form onSubmit={handleRatingSubmit} className="space-y-3 pt-1">
               <div className="flex flex-col items-center justify-center py-3 bg-slate-50/80 rounded-2xl border border-slate-100">
@@ -415,17 +545,22 @@ export default function SellerInfoScreen({
                 </span>
               </div>
 
-              <textarea
-                value={userComment}
-                onChange={(e) => setUserComment(e.target.value)}
-                placeholder={`Write a quick review about ${sellerName}...`}
-                rows={2}
-                className="w-full text-xs p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#1944F1] focus:ring-2 focus:ring-blue-100/70 resize-none font-sans transition-all"
-              />
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700 block">
+                  Rating Description & Review
+                </label>
+                <textarea
+                  value={userComment}
+                  onChange={(e) => setUserComment(e.target.value)}
+                  placeholder={`Write your review description about ${sellerName} (e.g. prompt handover, item condition)...`}
+                  rows={2}
+                  className="w-full text-xs p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-[#1944F1] focus:ring-2 focus:ring-blue-100/70 resize-none font-sans transition-all"
+                />
+              </div>
 
               <button
                 type="submit"
-                className="w-full py-3.5 px-4 rounded-2xl bg-[#1944F1] hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-4 rounded-2xl bg-[#1944F1] hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Submit Rating</span>
@@ -465,7 +600,7 @@ export default function SellerInfoScreen({
               </div>
             ) : (
               sellerRatingData.reviews.map((rev, idx) => (
-                <div key={rev.id || idx} className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-100 space-y-1.5">
+                <div key={rev.id || idx} className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-100 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px] flex items-center justify-center">
@@ -475,12 +610,25 @@ export default function SellerInfoScreen({
                     </div>
                     <span className="text-[10px] text-slate-400 font-medium">{rev.date}</span>
                   </div>
-                  <div className="flex gap-0.5 text-amber-400">
-                    {[...Array(rev.rating || 5)].map((_, i) => (
-                      <Star key={i} className="w-3 h-3 fill-amber-400" />
-                    ))}
+
+                  {/* Star Rating + Rating Tier Description Badge */}
+                  <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                    <div className="flex gap-0.5 text-amber-400">
+                      {[...Array(rev.rating || 5)].map((_, i) => (
+                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400" />
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-700 bg-white px-2 py-0.5 rounded-full border border-slate-200/80 shadow-2xs">
+                      {rev.ratingDescription || ratingDescriptionMap[rev.rating] || `${rev.rating || 5}/5 Stars`}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-slate-600 leading-snug">{rev.comment}</p>
+
+                  {/* Rating Description / Peer Review text */}
+                  <div className="pt-0.5">
+                    <p className="text-xs text-slate-700 leading-relaxed font-normal bg-white/70 p-2.5 rounded-xl border border-slate-100/90 break-words">
+                      {rev.comment || rev.description || rev.ratingDescription || 'Recommended student seller! Genuine item and great communication.'}
+                    </p>
+                  </div>
                 </div>
               ))
             )}
@@ -489,13 +637,28 @@ export default function SellerInfoScreen({
 
       </div>
 
-      {/* 9. FIXED BOTTOM ACTION BAR - Only for peer sellers (Chat button) */}
+      {/* 9. FIXED BOTTOM ACTION BAR - Only for peer sellers (Call + Chat buttons) */}
       {!isMyListing && (
         <div className="p-4 px-5 border-t border-slate-100 bg-white/95 backdrop-blur-md flex items-center gap-3 shrink-0 fixed bottom-0 left-0 right-0 z-40 shadow-lg">
+          {sellerPhoneNumber && (
+            <button
+              type="button"
+              onClick={() => {
+                const telUrl = `tel:${sellerPhoneNumber}`;
+                try { window.open(telUrl, '_system'); } catch (err) {}
+                window.location.href = telUrl;
+              }}
+              className="flex-1 py-4 px-4 rounded-2xl bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-xs shadow-md shadow-green-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              title={`Call +91 ${sellerPhoneNumber}`}
+            >
+              <Phone className="w-4 h-4 text-white" />
+              <span>Call</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={handleChatTrigger}
-            className="w-full py-4 px-5 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white font-bold text-xs shadow-md shadow-blue-500/25 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+            className="flex-1 py-4 px-5 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white font-bold text-xs shadow-md shadow-blue-500/25 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
           >
             <MessageSquare className="w-4.5 h-4.5" />
             <span>Chat with {sellerName}</span>

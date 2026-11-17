@@ -7,14 +7,14 @@ const Product = require('../models/Product');
 const cacheService = require('../cache/cacheService');
 const emailService = require('../services/emailService');
 
-// Configure Cloudinary explicitly from environment with secure fallback credentials
+// Configure Cloudinary explicitly from environment variables
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'admrhw6j',
-  api_key: process.env.CLOUDINARY_API_KEY || '257446998439911',
-  api_secret: process.env.CLOUDINARY_API_SECRET || 'GSM8XHIi7qXJL9xPyHwfGs0eioA'
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'campus_buddy_super_secret_jwt_key_2026_token_auth';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('FATAL: JWT_SECRET environment variable is missing.'); })() : 'campus_buddy_dev_jwt_secret');
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Timing-safe string comparison to protect against side-channel timing attacks
@@ -37,6 +37,12 @@ const formatUser = (user) => ({
   avatar: user.avatar || '/avatar.svg',
   studentIdUrl: user.studentIdUrl || '',
   isVerified: Boolean(user.isVerified),
+  course: user.course || '',
+  year: user.year || '1st Year',
+  dob: user.dob || '',
+  ratingAverage: user.ratingAverage || 0,
+  ratingCount: user.ratingCount || 0,
+  ratings: user.ratings || [],
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
@@ -58,7 +64,6 @@ async function signup(req, res, next) {
       year,
       universityName,
       studentIdUrl,
-      isVerified,
       avatar
     } = req.body;
 
@@ -102,7 +107,7 @@ async function signup(req, res, next) {
       phone: rawPhone,
       universityName: typeof universityName === 'string' ? universityName.trim().slice(0, 100) : 'Campus Member',
       studentIdUrl: typeof studentIdUrl === 'string' ? studentIdUrl.trim() : '',
-      isVerified: Boolean(isVerified),
+      isVerified: false, // Security: Verification status is strictly granted by server-side verification, never by user input
       avatar: typeof avatar === 'string' ? avatar.trim() : '/avatar.svg',
     });
 
@@ -195,7 +200,7 @@ async function getMe(req, res, next) {
 async function updateUniversity(req, res, next) {
   try {
     const userId = req.user.id || (req.auth && req.auth.userId);
-    const { universityName, fullName, name, isVerified, studentIdUrl, avatar, dob, course, year, phone, phoneNumber } = req.body;
+    const { universityName, fullName, name, studentIdUrl, avatar, dob, course, year, phone, phoneNumber } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -205,6 +210,9 @@ async function updateUniversity(req, res, next) {
     // University name is locked once verified and cannot be edited
     if (universityName && !user.universityName) user.universityName = universityName;
     if (fullName || name) user.fullName = fullName || name;
+    if (course !== undefined) user.course = (course || '').trim();
+    if (year !== undefined) user.year = (year || '').trim();
+    if (dob !== undefined) user.dob = (dob || '').trim();
     let phoneChanged = false;
     let targetPhone = '';
     if (phone !== undefined || phoneNumber !== undefined) {
@@ -218,7 +226,6 @@ async function updateUniversity(req, res, next) {
       user.phone = targetPhone;
     }
     if (studentIdUrl) user.studentIdUrl = studentIdUrl;
-    if (isVerified !== undefined) user.isVerified = Boolean(isVerified);
 
     // If avatar is provided as a Base64 data URI, upload it permanently to Cloudinary
     if (avatar && typeof avatar === 'string') {
@@ -516,11 +523,17 @@ async function uploadStudentId(req, res, next) {
       return res.status(400).json({ error: 'No student ID file provided' });
     }
 
+    // Validate MIME type strictly to prevent malicious file uploads
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (!allowedMimes.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: 'Only JPG, PNG, and WebP images are permitted for Student ID verification' });
+    }
+
     const fileBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
 
     const result = await cloudinary.uploader.upload(fileBase64, {
       folder: 'campus_buddy_verification',
-      resource_type: 'auto',
+      resource_type: 'image',
       transformation: [{ width: 1200, height: 1200, crop: 'limit', quality: 'auto', fetch_format: 'auto' }]
     });
 
@@ -610,6 +623,171 @@ async function deleteAccount(req, res, next) {
   }
 }
 
+/**
+ * GET /api/auth/student/:id
+ * Retrieve public student profile (phone, course, year, dob, etc.)
+ */
+async function getStudentProfile(req, res, next) {
+  try {
+    const studentId = req.params.id;
+    if (!studentId || !studentId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ error: 'Invalid student ID' });
+    }
+
+    const student = await User.findById(studentId)
+      .select('fullName email phone universityName avatar isVerified course year dob ratings ratingAverage ratingCount createdAt')
+      .lean();
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    res.json({
+      _id: student._id,
+      id: student._id,
+      fullName: student.fullName,
+      phone: student.phone || '',
+      email: student.email,
+      universityName: student.universityName,
+      avatar: student.avatar,
+      isVerified: Boolean(student.isVerified),
+      course: student.course || '',
+      year: student.year || '',
+      dob: student.dob || '',
+      ratingAverage: student.ratingAverage || 0,
+      ratingCount: student.ratingCount || 0,
+      ratings: student.ratings || [],
+      createdAt: student.createdAt
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/auth/seller/:id/rating
+ * Submit a peer rating for a seller
+ */
+async function submitSellerRating(req, res, next) {
+  try {
+    const sellerId = req.params.id;
+    const reviewerId = req.user?.id || (req.auth && req.auth.userId);
+    const { rating, ratingDescription, comment, reviewerName } = req.body;
+
+    if (!sellerId || !sellerId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ error: 'Invalid seller ID' });
+    }
+
+    if (String(reviewerId) === String(sellerId)) {
+      return res.status(400).json({ error: 'You cannot rate your own seller profile' });
+    }
+
+    const seller = await User.findById(sellerId);
+    if (!seller) {
+      return res.status(404).json({ error: 'Seller not found' });
+    }
+
+    if (!Array.isArray(seller.ratings)) {
+      seller.ratings = [];
+    }
+
+    // Check if buyer has already rated this seller -> Update existing rating instead of creating duplicate!
+    const existingIndex = reviewerId 
+      ? seller.ratings.findIndex(r => r.reviewer && String(r.reviewer) === String(reviewerId))
+      : -1;
+
+    if (existingIndex !== -1) {
+      seller.ratings[existingIndex].rating = numericRating;
+      seller.ratings[existingIndex].ratingDescription = desc;
+      seller.ratings[existingIndex].comment = reviewComment;
+      seller.ratings[existingIndex].reviewerName = name;
+      seller.ratings[existingIndex].createdAt = new Date();
+    } else {
+      seller.ratings.unshift(newReview);
+    }
+
+    // Clean up any historical duplicate ratings from the same reviewer
+    const seenReviewers = new Set();
+    seller.ratings = seller.ratings.filter(r => {
+      if (!r.reviewer) return true;
+      const rId = String(r.reviewer);
+      if (seenReviewers.has(rId)) return false;
+      seenReviewers.add(rId);
+      return true;
+    });
+
+    const total = seller.ratings.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
+    seller.ratingAverage = Number((total / seller.ratings.length).toFixed(1));
+    seller.ratingCount = seller.ratings.length;
+
+    await seller.save();
+
+    res.json({
+      success: true,
+      average: seller.ratingAverage,
+      count: seller.ratingCount,
+      reviews: seller.ratings.map(r => ({
+        id: String(r._id || ('rev_' + Date.now())),
+        reviewerId: r.reviewer ? String(r.reviewer) : (reviewerId ? String(reviewerId) : null),
+        name: r.reviewerName,
+        rating: r.rating,
+        ratingDescription: r.ratingDescription,
+        comment: r.comment,
+        date: 'Just now'
+      }))
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/auth/seller/:id/ratings
+ * Retrieve seller ratings from MongoDB
+ */
+async function getSellerRatingsEndpoint(req, res, next) {
+  try {
+    const sellerId = req.params.id;
+    if (!sellerId || !sellerId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.json({ average: 0, count: 0, reviews: [] });
+    }
+
+    const seller = await User.findById(sellerId).select('ratings ratingAverage ratingCount').lean();
+    if (!seller) {
+      return res.json({ average: 0, count: 0, reviews: [] });
+    }
+
+    // Deduplicate any historical duplicate reviews
+    const seenReviewers = new Set();
+    const reviews = [];
+    for (const r of (seller.ratings || [])) {
+      const revId = r.reviewer ? String(r.reviewer) : null;
+      if (revId && seenReviewers.has(revId)) continue;
+      if (revId) seenReviewers.add(revId);
+      reviews.push({
+        id: String(r._id),
+        reviewerId: revId,
+        name: r.reviewerName,
+        rating: r.rating,
+        ratingDescription: r.ratingDescription,
+        comment: r.comment,
+        date: r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently'
+      });
+    }
+
+    const total = reviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
+    const avg = reviews.length > 0 ? Number((total / reviews.length).toFixed(1)) : 0;
+
+    res.json({
+      average: avg,
+      count: reviews.length,
+      reviews
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   signup,
   login,
@@ -621,5 +799,8 @@ module.exports = {
   resetPassword,
   uploadStudentId,
   uploadAvatar,
-  deleteAccount
+  deleteAccount,
+  getStudentProfile,
+  submitSellerRating,
+  getSellerRatingsEndpoint
 };

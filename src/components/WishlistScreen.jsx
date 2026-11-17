@@ -10,6 +10,7 @@ import {
   Bell
 } from 'lucide-react';
 import { formatRupeePrice, fetchProducts, updateAdLikes, incrementAdViews } from '../lib/api';
+import EmptyState from './EmptyState';
 
 export default function WishlistScreen({ 
   user, 
@@ -57,15 +58,16 @@ export default function WishlistScreen({
     }
   });
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => dbProducts.length === 0);
 
   // Fetch backend products dynamically on mount to ensure all listings are available
   useEffect(() => {
     let isMounted = true;
     const load = async () => {
       try {
-        setLoading(true);
-        setDbProducts([]);
+        if (!dbProducts || dbProducts.length === 0) {
+          setLoading(true);
+        }
         const data = await fetchProducts(user?.universityName || '');
         if (isMounted && Array.isArray(data)) {
           const strictlyFiltered = data.filter(p => p && isProductInUserUniversity(p));
@@ -420,36 +422,14 @@ export default function WishlistScreen({
             </div>
           ) : (
             /* Empty State View */
-            <motion.div
-              initial={{ opacity: 0, scale: 0.97 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="bg-[#F5F3F3] rounded-3xl p-8 border border-slate-100/90 text-center flex flex-col items-center justify-center space-y-4 my-6"
-            >
-              <div className="w-20 h-20 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-300 shadow-xs relative">
-                <svg width="36" height="36" viewBox="0 0 24 24">
-                  <path d={uploadedHeartPath} fill="none" stroke="#94A3B8" strokeWidth="1.8" />
-                </svg>
-                <Sparkles className="w-5 h-5 text-amber-400 absolute -top-1 -right-1 animate-pulse" />
-              </div>
-
-              <div className="space-y-1 max-w-xs">
-                <h3 className="text-base font-bold text-slate-900 font-sans">
-                  Your Wishlist is Empty
-                </h3>
-                <p className="text-xs text-slate-400 font-normal leading-relaxed">
-                  Tap the heart icon on any textbook, gadget, or campus ad to save it here.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setActiveNav && setActiveNav('home')}
-                className="px-6 py-2.5 rounded-full bg-[#1944F1] text-white hover:bg-blue-700 text-xs font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2"
-              >
-                <ShoppingBag className="w-4 h-4" />
-                Explore Campus Items
-              </button>
-            </motion.div>
+            <EmptyState
+              type="wishlist"
+              title="Your Wishlist is Empty"
+              description="Tap the heart icon on any textbook, gadget, or campus ad to save it here."
+              actionLabel="Explore Campus Items"
+              actionIcon={ShoppingBag}
+              onAction={() => setActiveNav && setActiveNav('home')}
+            />
           )}
 
         </div>

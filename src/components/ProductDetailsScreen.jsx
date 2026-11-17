@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -26,7 +26,10 @@ import {
   UserCheck,
   Mail,
   BookOpen,
-  Flag
+  Flag,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw
 } from 'lucide-react';
 import { 
   formatRupeePrice, 
@@ -36,8 +39,69 @@ import {
   getSellerRatings,
   submitSellerRating,
   apiReportProduct,
-  fetchProductById
+  fetchProductById,
+  fetchStudentProfile
 } from '../lib/api';
+
+// Exact SVG Call icon from Clickons/Call.svg
+function ClickonsCallIcon({ className = "w-4.5 h-4.5" }) {
+  return (
+    <svg 
+      width="24" 
+      height="24" 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <path 
+        d="M3.57495 1.78507C4.86403 0.500096 7.02542 0.85943 7.93802 2.37559L7.94437 2.38614L10.0481 5.98116C10.6676 7.06185 10.5113 8.45112 9.58705 9.37241L9.23813 9.72022C10.4736 11.658 12.3503 13.575 14.2473 14.7248L14.5942 14.4175C15.5184 13.5164 16.898 13.3683 17.9731 13.9807L17.9809 13.9852L21.5408 16.0552C22.4222 16.4771 22.8861 17.2924 22.981 18.1064C23.0759 18.9196 22.8156 19.8022 22.1826 20.4332L20.983 21.629C19.7376 22.8705 17.7101 23.4199 15.9799 22.636C13.7025 21.7053 10.2868 19.9491 7.17369 16.8459C4.05248 13.7347 2.29312 10.2235 1.36877 8.07565C0.580206 6.3562 1.1236 4.34015 2.36039 3.0955L3.54727 1.8138C3.5563 1.80404 3.56553 1.79446 3.57495 1.78507ZM4.99956 3.18371L3.81678 4.46098C3.80774 4.47074 3.79851 4.48032 3.78909 4.48971C3.04036 5.23606 2.79124 6.39219 3.19016 7.25375C3.194 7.26205 3.19773 7.2704 3.20134 7.2788C4.07772 9.31719 5.71644 12.5749 8.5874 15.4367C11.4635 18.3037 14.635 19.9343 16.7561 20.7993C16.7697 20.8048 16.7831 20.8107 16.7965 20.8168C17.6608 21.2145 18.8206 20.9661 19.5693 20.2198L20.7689 19.024C20.9356 18.8578 21.0252 18.5946 20.9951 18.3366C20.9669 18.095 20.8472 17.9294 20.6622 17.8457C20.6315 17.8317 20.6014 17.8162 20.5722 17.7992L16.9781 15.7093C16.6631 15.5317 16.2592 15.5759 15.9848 15.8495C15.971 15.8633 15.9567 15.8767 15.9421 15.8896L15.0424 16.6868C14.7325 16.9613 14.2849 17.0168 13.9171 16.8261C11.2199 15.4281 8.58822 12.6858 7.10831 10.0515C6.88962 9.66223 6.95716 9.17549 7.27365 8.86001L8.17334 7.96319C8.44778 7.68962 8.49207 7.28699 8.31392 6.97306L6.22104 3.39666C5.93617 2.92942 5.31277 2.88679 4.99956 3.18371Z" 
+        fillRule="evenodd" 
+        clipRule="evenodd" 
+        fill="currentColor"
+      />
+      <path 
+        d="M16.2554 7.74458C15.754 7.24317 14.9795 7.06344 14.4318 7.24599C13.862 7.43594 13.2461 7.12797 13.0561 6.55812C12.8662 5.98826 13.1741 5.37232 13.744 5.18237C15.154 4.71235 16.7723 5.18519 17.7935 6.20645C18.8148 7.22771 19.2876 8.84596 18.8176 10.256C18.6277 10.8259 18.0117 11.1338 17.4419 10.9439C16.872 10.7539 16.5641 10.138 16.754 9.56815C16.9366 9.0205 16.7568 8.24598 16.2554 7.74458Z" 
+        fillRule="evenodd" 
+        clipRule="evenodd" 
+        fill="currentColor"
+      />
+      <path 
+        d="M18.9493 5.05068C17.1752 3.27653 14.5962 2.65215 12.2855 3.27428C11.7415 3.42074 11.1818 3.09848 11.0353 2.5545C10.8889 2.01052 11.2111 1.45081 11.7551 1.30435C14.7486 0.498423 18.0859 1.3021 20.3919 3.60812C22.6979 5.91414 23.5016 9.25145 22.6957 12.2449C22.5492 12.7889 21.9895 13.1111 21.4455 12.9647C20.9015 12.8182 20.5793 12.2585 20.7257 11.7145C21.3478 9.40375 20.7235 6.82482 18.9493 5.05068Z" 
+        fillRule="evenodd" 
+        clipRule="evenodd" 
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+// Exact SVG Chat icon from Clickons/Chat.svg
+function ClickonsChatIcon({ className = "w-4.5 h-4.5" }) {
+  return (
+    <svg 
+      width="24" 
+      height="24" 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <path 
+        d="M1 5.78146C1 3.646 2.62571 2 4.76316 2H14.2368C16.3973 2 18 3.76883 18 5.78146V11.7417C18 13.9004 16.2523 15.5232 14.2368 15.5232H8.01974C7.37166 15.5232 6.78381 15.7363 6.23901 16.127L2.59201 18.8059C2.28819 19.0291 1.88468 19.0625 1.54834 18.8922C1.212 18.7219 1 18.377 1 18V5.78146ZM3 16.0246L5.06751 14.5059C5.90319 13.9005 6.89305 13.5232 8.01974 13.5232H14.2368C15.182 13.5232 16 12.7619 16 11.7417V5.78146C16 4.81395 15.2342 4 14.2368 4H4.76316C3.74271 4 3 4.7381 3 5.78146V16.0246Z" 
+        fillRule="evenodd" 
+        clipRule="evenodd" 
+        fill="currentColor"
+      />
+      <path 
+        d="M19.5305 8.62091C19.7399 8.10986 20.3239 7.86529 20.835 8.07467C22.095 8.59089 23 9.78417 23 11.1825V22C23 22.3668 22.7992 22.7042 22.4768 22.879C22.1543 23.0539 21.762 23.0382 21.4546 22.8382L17.9546 20.5608C17.9328 20.5466 17.9115 20.5316 17.8908 20.5157C17.5068 20.2207 16.9266 20.0584 16.2353 20.0584H10.3676C8.98095 20.0584 7.68903 19.2926 7.09922 18.0694C6.85936 17.5719 7.0682 16.9742 7.56568 16.7343C8.06316 16.4944 8.66089 16.7033 8.90075 17.2008C9.13447 17.6855 9.69549 18.0584 10.3676 18.0584H16.2353C17.1784 18.0584 18.2298 18.27 19.0755 18.9041L21 20.1563V11.1825C21 10.683 20.6697 10.1683 20.0768 9.92537C19.5657 9.716 19.3211 9.13197 19.5305 8.62091Z" 
+        fillRule="evenodd" 
+        clipRule="evenodd" 
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 
 export default function ProductDetailsScreen({
   product = {},
@@ -52,6 +116,7 @@ export default function ProductDetailsScreen({
   onViewSellerInfo
 }) {
   const [liveProduct, setLiveProduct] = useState(product);
+  const [sellerStudentInfo, setSellerStudentInfo] = useState(null);
 
   useEffect(() => {
     setLiveProduct(product);
@@ -96,6 +161,248 @@ export default function ProductDetailsScreen({
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [reportSuccess, setReportSuccess] = useState(false);
 
+  // --- Swipe support for hero image carousel ---
+  const heroTouchStart = useRef(null);
+  const heroTouchDelta = useRef(0);
+
+  const handleHeroTouchStart = useCallback((e) => {
+    heroTouchStart.current = e.touches[0].clientX;
+    heroTouchDelta.current = 0;
+  }, []);
+
+  const handleHeroTouchMove = useCallback((e) => {
+    if (heroTouchStart.current === null) return;
+    heroTouchDelta.current = e.touches[0].clientX - heroTouchStart.current;
+  }, []);
+
+  const handleHeroTouchEnd = useCallback(() => {
+    const threshold = 50;
+    if (heroTouchDelta.current < -threshold && rawImages.length > 1) {
+      setSelectedPhotoIndex(prev => (prev < rawImages.length - 1 ? prev + 1 : 0));
+    } else if (heroTouchDelta.current > threshold && rawImages.length > 1) {
+      setSelectedPhotoIndex(prev => (prev > 0 ? prev - 1 : rawImages.length - 1));
+    }
+    heroTouchStart.current = null;
+    heroTouchDelta.current = 0;
+  }, [rawImages.length]);
+
+  // --- Zoom & pan state for fullscreen lightbox ---
+  const [zoomScale, setZoomScale] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const zoomScaleRef = useRef(1);
+  const panOffsetRef = useRef({ x: 0, y: 0 });
+  zoomScaleRef.current = zoomScale;
+  panOffsetRef.current = panOffset;
+
+  const viewerContainerRef = useRef(null);
+  const viewerImgRef = useRef(null);
+  const pinchStartDist = useRef(null);
+  const pinchStartScale = useRef(1);
+  const panStartRef = useRef(null);
+  const panStartOffset = useRef({ x: 0, y: 0 });
+  const lastTapRef = useRef(0);
+  const mouseDragStart = useRef(null);
+
+  // --- Swipe support for lightbox viewer (when not zoomed) ---
+  const viewerTouchStart = useRef(null);
+  const viewerTouchDelta = useRef(0);
+
+  // Reset zoom when changing images or closing viewer
+  const resetZoom = useCallback(() => {
+    setZoomScale(1);
+    setPanOffset({ x: 0, y: 0 });
+    zoomScaleRef.current = 1;
+    panOffsetRef.current = { x: 0, y: 0 };
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    setZoomScale(prev => {
+      const next = Math.min(Number((prev + 0.5).toFixed(2)), 4);
+      zoomScaleRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoomScale(prev => {
+      const next = Math.max(Number((prev - 0.5).toFixed(2)), 1);
+      zoomScaleRef.current = next;
+      if (next <= 1) {
+        setPanOffset({ x: 0, y: 0 });
+        panOffsetRef.current = { x: 0, y: 0 };
+      }
+      return next;
+    });
+  }, []);
+
+  const handleDoubleClick = useCallback((e) => {
+    e.stopPropagation();
+    if (zoomScaleRef.current > 1) {
+      resetZoom();
+    } else {
+      setZoomScale(2.5);
+      zoomScaleRef.current = 2.5;
+    }
+  }, [resetZoom]);
+
+  useEffect(() => {
+    resetZoom();
+  }, [selectedPhotoIndex, isImageViewerOpen, resetZoom]);
+
+  // Native non-passive touch and wheel listeners for 100% reliable pinch-to-zoom & pan
+  useEffect(() => {
+    const el = viewerContainerRef.current;
+    if (!el || !isImageViewerOpen) return;
+
+    const calcDistance = (t1, t2) => {
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const onTouchStart = (e) => {
+      if (e.touches.length === 2) {
+        // Two-finger pinch start
+        pinchStartDist.current = calcDistance(e.touches[0], e.touches[1]);
+        pinchStartScale.current = zoomScaleRef.current;
+        setIsDragging(true);
+      } else if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        if (zoomScaleRef.current > 1) {
+          // One-finger pan when zoomed
+          panStartRef.current = { x: touch.clientX, y: touch.clientY };
+          panStartOffset.current = { ...panOffsetRef.current };
+          setIsDragging(true);
+        } else {
+          // Track swipe for switching photos
+          viewerTouchStart.current = touch.clientX;
+          viewerTouchDelta.current = 0;
+        }
+
+        // Double-tap detection
+        const now = Date.now();
+        if (now - lastTapRef.current < 320) {
+          if (zoomScaleRef.current > 1) {
+            resetZoom();
+          } else {
+            setZoomScale(2.5);
+            zoomScaleRef.current = 2.5;
+          }
+          lastTapRef.current = 0;
+        } else {
+          lastTapRef.current = now;
+        }
+      }
+    };
+
+    const onTouchMove = (e) => {
+      if (e.touches.length === 2 && pinchStartDist.current !== null) {
+        if (e.cancelable) e.preventDefault();
+        const currentDist = calcDistance(e.touches[0], e.touches[1]);
+        const scaleFactor = currentDist / pinchStartDist.current;
+        const newScale = Math.min(Math.max(pinchStartScale.current * scaleFactor, 1), 4.5);
+        setZoomScale(newScale);
+        zoomScaleRef.current = newScale;
+        if (newScale <= 1) {
+          setPanOffset({ x: 0, y: 0 });
+          panOffsetRef.current = { x: 0, y: 0 };
+        }
+      } else if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        if (zoomScaleRef.current > 1 && panStartRef.current) {
+          if (e.cancelable) e.preventDefault();
+          const dx = touch.clientX - panStartRef.current.x;
+          const dy = touch.clientY - panStartRef.current.y;
+          const nextOffset = {
+            x: panStartOffset.current.x + dx,
+            y: panStartOffset.current.y + dy
+          };
+          setPanOffset(nextOffset);
+          panOffsetRef.current = nextOffset;
+        } else if (viewerTouchStart.current !== null) {
+          viewerTouchDelta.current = touch.clientX - viewerTouchStart.current;
+        }
+      }
+    };
+
+    const onTouchEnd = (e) => {
+      setIsDragging(false);
+      pinchStartDist.current = null;
+      panStartRef.current = null;
+
+      // Swipe navigation when not zoomed
+      if (zoomScaleRef.current <= 1 && viewerTouchStart.current !== null) {
+        const threshold = 45;
+        if (viewerTouchDelta.current < -threshold && rawImages.length > 1) {
+          setSelectedPhotoIndex(prev => (prev < rawImages.length - 1 ? prev + 1 : 0));
+        } else if (viewerTouchDelta.current > threshold && rawImages.length > 1) {
+          setSelectedPhotoIndex(prev => (prev > 0 ? prev - 1 : rawImages.length - 1));
+        }
+      }
+
+      viewerTouchStart.current = null;
+      viewerTouchDelta.current = 0;
+
+      if (zoomScaleRef.current < 1.05) {
+        resetZoom();
+      }
+    };
+
+    const onWheel = (e) => {
+      if (e.cancelable) e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.25 : 0.25;
+      setZoomScale(prev => {
+        const next = Math.min(Math.max(Number((prev + delta).toFixed(2)), 1), 4.5);
+        zoomScaleRef.current = next;
+        if (next <= 1) {
+          setPanOffset({ x: 0, y: 0 });
+          panOffsetRef.current = { x: 0, y: 0 };
+        }
+        return next;
+      });
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: false });
+    el.addEventListener('wheel', onWheel, { passive: false });
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [isImageViewerOpen, rawImages.length, resetZoom]);
+
+  // Desktop mouse drag to pan when zoomed
+  const handleMouseDown = (e) => {
+    if (zoomScale <= 1) return;
+    e.preventDefault();
+    setIsDragging(true);
+    mouseDragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      initPan: { ...panOffset }
+    };
+  };
+
+  const handleMouseMove = (e) => {
+    if (!mouseDragStart.current || zoomScale <= 1) return;
+    const dx = e.clientX - mouseDragStart.current.x;
+    const dy = e.clientY - mouseDragStart.current.y;
+    setPanOffset({
+      x: mouseDragStart.current.initPan.x + dx,
+      y: mouseDragStart.current.initPan.y + dy
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    mouseDragStart.current = null;
+  };
+
   // Extract seller information
   const sellerObj = (typeof safeProduct.seller === 'object' && safeProduct.seller !== null) ? safeProduct.seller : {};
   const sellerName = sellerObj.fullName || safeProduct.sellerName || (typeof safeProduct.seller === 'string' ? safeProduct.seller : 'Campus Student');
@@ -117,18 +424,25 @@ export default function ProductDetailsScreen({
     (Array.isArray(userAds) && userAds.some(a => String(a._id || a.id) === String(productId)))
   );
 
-  // Strictly resolve exactly 10-digit seller phone number
+  // Strictly resolve exactly 10-digit seller phone number from student section / API
   const resolveSellerPhoneNumber = () => {
-    // 1. If viewing own listing, return user's latest phone directly
-    if (isMyListing && user?.phone) {
-      const uDigits = String(user.phone).replace(/\D/g, '');
+    // 1. If viewing own listing, return user's latest phone directly from student profile
+    if (isMyListing) {
+      const myPhone = user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('user_phone') : '');
+      const uDigits = String(myPhone || '').replace(/\D/g, '');
       if (uDigits.length >= 10) return uDigits.slice(-10);
     }
 
-    // 2. Priority: seller object phone from fresh MongoDB doc, then product contactNumber/phone
+    // 2. Priority: seller phone fetched from student information section API
+    if (sellerStudentInfo?.phone) {
+      const sDigits = String(sellerStudentInfo.phone).replace(/\D/g, '');
+      if (sDigits.length >= 10) return sDigits.slice(-10);
+    }
+
+    // 3. Fallback: populated seller object phone, or product contactNumber / phone
     let raw = sellerObj?.phone || sellerObj?.phoneNumber || safeProduct.contactNumber || safeProduct.phone || '';
 
-    // 3. Check userAds if user owns this listing locally
+    // 4. Check userAds if user owns this listing locally
     if (!raw && Array.isArray(userAds)) {
       const match = userAds.find(a => String(a._id || a.id) === String(productId));
       if (match) {
@@ -136,7 +450,7 @@ export default function ProductDetailsScreen({
       }
     }
 
-    // 4. Fallback to product cache
+    // 5. Fallback to product cache
     if (!raw) {
       try {
         const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
@@ -168,8 +482,35 @@ export default function ProductDetailsScreen({
   const targetSellerKey = sellerId || sellerNameNormalized || 'seller';
   const [sellerRatingData, setSellerRatingData] = useState(() => getSellerRatings(targetSellerKey));
 
+  // Fetch seller student information from student section API
+  useEffect(() => {
+    let isMounted = true;
+    const targetUserId = sellerId && /^[0-9a-fA-F]{24}$/.test(sellerId) ? sellerId : null;
+    if (targetUserId && targetUserId !== currentUserId) {
+      fetchStudentProfile(targetUserId).then(profile => {
+        if (isMounted && profile) {
+          setSellerStudentInfo(profile);
+        }
+      }).catch(() => {});
+    }
+    return () => { isMounted = false; };
+  }, [sellerId, currentUserId]);
+
   useEffect(() => {
     setSellerRatingData(getSellerRatings(targetSellerKey));
+  }, [targetSellerKey, safeProduct?._id]);
+
+  // Keep rating updated in real-time when submitted from SellerInfoScreen
+  useEffect(() => {
+    const handleRatingSync = () => {
+      setSellerRatingData(getSellerRatings(targetSellerKey));
+    };
+    window.addEventListener('seller-rating-updated', handleRatingSync);
+    window.addEventListener('storage', handleRatingSync);
+    return () => {
+      window.removeEventListener('seller-rating-updated', handleRatingSync);
+      window.removeEventListener('storage', handleRatingSync);
+    };
   }, [targetSellerKey]);
 
   useEffect(() => {
@@ -260,19 +601,19 @@ export default function ProductDetailsScreen({
 
   const resolvedSellerCourse = isMyListing
     ? (user?.course || (typeof window !== 'undefined' ? (localStorage.getItem('user_course') || localStorage.getItem('pending_course')) : '') || sellerObj.sellerCourse || sellerObj.course || '')
-    : (sellerObj.sellerCourse || sellerObj.course || '');
+    : (sellerStudentInfo?.course || sellerObj.sellerCourse || sellerObj.course || '');
 
   const resolvedSellerYear = isMyListing
     ? (user?.year || (typeof window !== 'undefined' ? (localStorage.getItem('user_year') || localStorage.getItem('pending_year')) : '') || sellerObj.sellerYear || sellerObj.year || '')
-    : (sellerObj.sellerYear || sellerObj.year || '');
+    : (sellerStudentInfo?.year || sellerObj.sellerYear || sellerObj.year || '');
 
   const resolvedSellerDob = isMyListing
     ? (user?.dob || (typeof window !== 'undefined' ? (localStorage.getItem('user_dob') || localStorage.getItem('pending_dob')) : '') || sellerObj.sellerDob || sellerObj.dob || '')
-    : (sellerObj.sellerDob || sellerObj.dob || '');
+    : (sellerStudentInfo?.dob || sellerObj.sellerDob || sellerObj.dob || '');
 
   const resolvedSellerEmail = isMyListing
     ? (user?.email || (typeof window !== 'undefined' ? localStorage.getItem('pending_email') : '') || `${sellerNameNormalized}@campus.edu`)
-    : (sellerObj.email || `${sellerNameNormalized.replace(/\s+/g, '.')}@campus.edu`);
+    : (sellerStudentInfo?.email || sellerObj.email || `${sellerNameNormalized.replace(/\s+/g, '.')}@campus.edu`);
 
   const handleOpenSellerInfo = () => {
     if (onViewSellerInfo) {
@@ -287,6 +628,7 @@ export default function ProductDetailsScreen({
         sellerYear: resolvedSellerYear,
         sellerDob: resolvedSellerDob,
         sellerEmail: resolvedSellerEmail,
+        sellerPhone: sellerPhoneNumber,
         isMyListing
       });
     }
@@ -443,6 +785,9 @@ export default function ProductDetailsScreen({
         <div className="p-4 pt-3 pb-1">
           <div
             onClick={() => setIsImageViewerOpen(true)}
+            onTouchStart={handleHeroTouchStart}
+            onTouchMove={handleHeroTouchMove}
+            onTouchEnd={handleHeroTouchEnd}
             className="w-full aspect-[4/3] rounded-[28px] overflow-hidden bg-slate-100 border border-slate-200/70 relative shadow-sm cursor-pointer group select-none"
             title="Click to view full image"
           >
@@ -696,10 +1041,10 @@ export default function ProductDetailsScreen({
             <button
               type="button"
               onClick={handleCallSeller}
-              className="py-3.5 px-5 rounded-2xl bg-[#F0FDF4] hover:bg-[#DCFCE7] text-emerald-700 border border-emerald-200 font-bold text-xs shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+              className="flex-1 py-3.5 px-4 rounded-2xl bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-xs shadow-md shadow-green-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
               title={sellerPhoneNumber ? `Call ${sellerPhoneNumber}` : "Call Seller"}
             >
-              <Phone className="w-4 h-4 text-emerald-600" />
+              <ClickonsCallIcon className="w-4.5 h-4.5 fill-current text-white shrink-0" />
               <span>Call</span>
             </button>
             <button
@@ -723,9 +1068,9 @@ export default function ProductDetailsScreen({
                   });
                 }
               }}
-              className="flex-1 py-3.5 px-5 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 px-4 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
             >
-              <MessageSquare className="w-4 h-4" />
+              <ClickonsChatIcon className="w-4.5 h-4.5 fill-current text-white shrink-0" />
               <span>Chat with Seller</span>
             </button>
           </div>
@@ -777,7 +1122,7 @@ export default function ProductDetailsScreen({
                     }}
                     className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white font-semibold text-xs hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <Phone className="w-3.5 h-3.5" />
+                    <ClickonsCallIcon className="w-4 h-4 fill-current text-white shrink-0" />
                     <span>Call Now</span>
                   </button>
                 ) : (
@@ -830,7 +1175,7 @@ export default function ProductDetailsScreen({
         )}
       </AnimatePresence>
 
-      {/* FULL-SCREEN IMAGE VIEWER LIGHTBOX */}
+      {/* FULL-SCREEN IMAGE VIEWER LIGHTBOX WITH ZOOM */}
       <AnimatePresence>
         {isImageViewerOpen && (
           <motion.div
@@ -838,40 +1183,97 @@ export default function ProductDetailsScreen({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col justify-between items-center p-3 sm:p-6 select-none touch-none overscroll-none"
-            onClick={() => setIsImageViewerOpen(false)}
-            onTouchMove={(e) => e.preventDefault()}
+            className="fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col justify-between items-center p-3 sm:p-6 select-none overscroll-none"
+            onClick={() => { if (zoomScale <= 1) setIsImageViewerOpen(false); }}
           >
-            {/* Top Bar: Counter & Close Button */}
+            {/* Top Bar: Counter, Zoom Controls & Close Button */}
             <div
               className="w-full flex items-center justify-between text-white z-20 max-w-5xl px-2 pt-2"
               onClick={(e) => e.stopPropagation()}
             >
-              {rawImages.length > 1 ? (
-                <div className="bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide border border-white/15 text-white/90 shadow-sm">
-                  {selectedPhotoIndex + 1} / {rawImages.length}
-                </div>
-              ) : (
-                <div />
-              )}
+              {/* Photo counter */}
+              <div className="flex items-center gap-2">
+                {rawImages.length > 1 ? (
+                  <div className="bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide border border-white/15 text-white/90 shadow-sm">
+                    {selectedPhotoIndex + 1} / {rawImages.length}
+                  </div>
+                ) : (
+                  <div />
+                )}
+              </div>
 
-              <button
-                type="button"
-                onClick={() => setIsImageViewerOpen(false)}
-                className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 flex items-center justify-center text-white transition-all shadow-lg"
-                title="Close viewer (Esc)"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              {/* Center/Right Toolbar: Zoom In, Zoom Out, Percentage, Reset, Close */}
+              <div className="flex items-center gap-2">
+                {/* Zoom Controls Pill */}
+                <div className="flex items-center bg-white/10 backdrop-blur-md rounded-full p-1 border border-white/15 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={handleZoomOut}
+                    disabled={zoomScale <= 1}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/20 active:scale-90 disabled:opacity-30 disabled:pointer-events-none transition-all"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDoubleClick}
+                    className="px-2 py-0.5 text-xs font-bold text-white/90 select-none min-w-[46px] text-center hover:text-white"
+                    title="Double-tap or click to toggle 1x / 2.5x"
+                  >
+                    {Math.round(zoomScale * 100)}%
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleZoomIn}
+                    disabled={zoomScale >= 4}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/20 active:scale-90 disabled:opacity-30 disabled:pointer-events-none transition-all"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Reset button when zoomed */}
+                {zoomScale > 1 && (
+                  <button
+                    type="button"
+                    onClick={resetZoom}
+                    className="h-9 px-3 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 flex items-center justify-center text-white text-xs font-semibold transition-all shadow-lg gap-1"
+                    title="Reset to 100%"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">1x</span>
+                  </button>
+                )}
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsImageViewerOpen(false)}
+                  className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 flex items-center justify-center text-white transition-all shadow-lg"
+                  title="Close viewer (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            {/* Center Image Container */}
+            {/* Center Image Container with Native Zoom, Drag Pan & Swipe */}
             <div
-              className="relative flex-1 w-full flex items-center justify-center p-2 my-auto max-w-5xl overflow-hidden"
+              ref={viewerContainerRef}
+              className="relative flex-1 w-full flex items-center justify-center p-2 my-auto max-w-5xl overflow-hidden select-none"
+              style={{ touchAction: 'none' }}
               onClick={(e) => e.stopPropagation()}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
             >
-              {/* Previous Button (if multiple images) */}
-              {rawImages.length > 1 && (
+              {/* Previous Button (if multiple images and not zoomed) */}
+              {rawImages.length > 1 && zoomScale <= 1 && (
                 <button
                   type="button"
                   onClick={() => setSelectedPhotoIndex(prev => (prev > 0 ? prev - 1 : rawImages.length - 1))}
@@ -882,20 +1284,37 @@ export default function ProductDetailsScreen({
                 </button>
               )}
 
-              {/* Full Image */}
-              <motion.img
+              {/* Full Image with Zoom & Pan */}
+              <motion.div
                 key={selectedPhotoIndex}
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                src={currentImage}
-                alt={product.title}
-                className="max-h-[75vh] sm:max-h-[82vh] max-w-full object-contain rounded-2xl shadow-2xl"
-              />
+                className="flex items-center justify-center w-full h-full pointer-events-none"
+              >
+                <img
+                  ref={viewerImgRef}
+                  src={currentImage}
+                  alt={safeProduct?.title || product?.title || 'Listing Image'}
+                  onDoubleClick={handleDoubleClick}
+                  className="max-h-[75vh] sm:max-h-[82vh] max-w-full object-contain rounded-2xl shadow-2xl pointer-events-auto"
+                  style={{
+                    transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomScale})`,
+                    transformOrigin: 'center center',
+                    cursor: zoomScale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'zoom-in',
+                    transition: isDragging ? 'none' : 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+                    willChange: 'transform',
+                    touchAction: 'none',
+                    userSelect: 'none',
+                    WebkitUserDrag: 'none',
+                  }}
+                  draggable={false}
+                />
+              </motion.div>
 
-              {/* Next Button (if multiple images) */}
-              {rawImages.length > 1 && (
+              {/* Next Button (if multiple images and not zoomed) */}
+              {rawImages.length > 1 && zoomScale <= 1 && (
                 <button
                   type="button"
                   onClick={() => setSelectedPhotoIndex(prev => (prev < rawImages.length - 1 ? prev + 1 : 0))}
@@ -906,6 +1325,13 @@ export default function ProductDetailsScreen({
                 </button>
               )}
             </div>
+
+            {/* Zoom Hint */}
+            {zoomScale <= 1 && (
+              <div className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-[10px] font-medium text-white/70 border border-white/10 pointer-events-none whitespace-nowrap">
+                Pinch or scroll to zoom · Double-tap to zoom · Buttons (+/-)
+              </div>
+            )}
 
             {/* Bottom Thumbnails Strip (if multiple images) */}
             {rawImages.length > 1 && (

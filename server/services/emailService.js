@@ -7,9 +7,13 @@ const nodemailer = require('nodemailer');
  */
 
 function createGmailTransporter(port = 587) {
-  const user = (process.env.EMAIL_USER || 'ankitpaul9341@gmail.com').trim();
-  const rawPass = (process.env.EMAIL_PASS || 'slmjcgobjlphuevg').trim();
+  const user = (process.env.EMAIL_USER || '').trim();
+  const rawPass = (process.env.EMAIL_PASS || '').trim();
   const pass = rawPass.replace(/\s+/g, '');
+
+  if (!user || !pass) {
+    throw new Error('Email service configuration missing: EMAIL_USER and EMAIL_PASS environment variables are required.');
+  }
 
   if (port === 587) {
     return nodemailer.createTransport({
@@ -17,7 +21,7 @@ function createGmailTransporter(port = 587) {
       port: 587,
       secure: false, // STARTTLS
       auth: { user, pass },
-      tls: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: true },
       connectionTimeout: 10000,
       socketTimeout: 15000
     });
@@ -28,7 +32,7 @@ function createGmailTransporter(port = 587) {
     port: 465,
     secure: true, // SSL/TLS
     auth: { user, pass },
-    tls: { rejectUnauthorized: false },
+    tls: { rejectUnauthorized: true },
     connectionTimeout: 10000,
     socketTimeout: 15000
   });
@@ -47,7 +51,7 @@ function escapeHtml(str) {
  * Send password reset verification code email from ankitpaul9341@gmail.com
  */
 async function sendVerificationCode({ to, code, name }) {
-  const senderUser = (process.env.EMAIL_USER || 'ankitpaul9341@gmail.com').trim();
+  const senderUser = (process.env.EMAIL_USER || '').trim();
   const fromAddress = `"Campus Buddy" <${senderUser}>`;
 
   const recipientName = escapeHtml(name || 'Student');

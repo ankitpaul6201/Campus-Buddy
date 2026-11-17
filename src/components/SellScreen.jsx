@@ -9,13 +9,17 @@ import {
   Trash2,
   Bell,
   Check,
-  Phone
+  ArrowLeft
 } from 'lucide-react';
 
 import { createProductListing, formatRupeePrice, updateAdLikes } from '../lib/api';
 import CustomPopup from './CustomPopup';
 
-export default function SellScreen({ user, activeNav, setActiveNav, favorites = [], notifications = [], userAds = [], setUserAds, onAdCreated, onNavigateBack }) {
+const MAX_TITLE_CHARS = 50;
+const MAX_LOCATION_CHARS = 50;
+const MAX_DESC_CHARS = 400;
+
+export default function SellScreen({ user, activeNav, setActiveNav, favorites = [], setFavorites = () => {}, notifications = [], userAds = [], setUserAds, onAdCreated, onNavigateBack, canGoBack = false }) {
   const [photos, setPhotos] = useState([]);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
@@ -24,19 +28,73 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
   const [price, setPrice] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
-  const initialPhone = (user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('user_phone') : '') || '').toString().replace(/\D/g, '').slice(0, 10);
-  const [phone, setPhone] = useState(initialPhone);
+  const savedStudentPhone = (user?.phone || (typeof window !== 'undefined' ? localStorage.getItem('user_phone') : '') || '').toString().replace(/\D/g, '').slice(-10);
   const [isNegotiable, setIsNegotiable] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showWishlistModal, setShowWishlistModal] = useState(false);
   const [popupConfig, setPopupConfig] = useState(null);
 
+  const [isTitleLimitSurpassed, setIsTitleLimitSurpassed] = useState(false);
+  const [isLocationLimitSurpassed, setIsLocationLimitSurpassed] = useState(false);
+  const [isDescLimitSurpassed, setIsDescLimitSurpassed] = useState(false);
+
+  const showTitleLimit = isTitleLimitSurpassed || title.length >= MAX_TITLE_CHARS;
+  const showLocationLimit = isLocationLimitSurpassed || location.length >= MAX_LOCATION_CHARS;
+  const showDescLimit = isDescLimitSurpassed || description.length >= MAX_DESC_CHARS;
+
+  const handleTitleChange = (e) => {
+    const val = e.target.value;
+    if (val.length > MAX_TITLE_CHARS) {
+      setTitle(val.slice(0, MAX_TITLE_CHARS));
+      setIsTitleLimitSurpassed(true);
+    } else {
+      setTitle(val);
+      setIsTitleLimitSurpassed(val.length === MAX_TITLE_CHARS);
+    }
+  };
+
+  const handleLocationChange = (e) => {
+    const val = e.target.value;
+    if (val.length > MAX_LOCATION_CHARS) {
+      setLocation(val.slice(0, MAX_LOCATION_CHARS));
+      setIsLocationLimitSurpassed(true);
+    } else {
+      setLocation(val);
+      setIsLocationLimitSurpassed(val.length === MAX_LOCATION_CHARS);
+    }
+  };
+
+  const handleDescriptionChange = (e) => {
+    const val = e.target.value;
+    if (val.length > MAX_DESC_CHARS) {
+      setDescription(val.slice(0, MAX_DESC_CHARS));
+      setIsDescLimitSurpassed(true);
+    } else {
+      setDescription(val);
+      setIsDescLimitSurpassed(val.length === MAX_DESC_CHARS);
+    }
+  };
+
+  const handlePriceChange = (e) => {
+    const raw = e.target.value.replace(/\D/g, '');
+    if (!raw) {
+      setPrice('');
+      return;
+    }
+    const num = parseInt(raw, 10);
+    if (num > 200000) {
+      setPrice('200000');
+    } else {
+      setPrice(String(num));
+    }
+  };
+
   const cleanPriceValue = parseFloat(String(price).replace(/[^0-9.]/g, ''));
-  const cleanPhoneDigits = phone.replace(/\D/g, '');
   const isFormComplete = Boolean(
     photos.length > 0 &&
     title.trim() &&
+    title.length <= MAX_TITLE_CHARS &&
     category.trim() &&
     condition.trim() &&
     String(price).trim() &&
@@ -44,8 +102,9 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
     cleanPriceValue > 0 &&
     cleanPriceValue <= 200000 &&
     description.trim() &&
+    description.length <= MAX_DESC_CHARS &&
     location.trim() &&
-    cleanPhoneDigits.length === 10
+    location.length <= MAX_LOCATION_CHARS
   );
 
   const wishlistedProducts = (userAds || []).filter(item => favorites.includes(item.id || item._id));
@@ -233,13 +292,15 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
       return;
     }
 
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length !== 10) {
+    if (!savedStudentPhone || savedStudentPhone.length !== 10) {
       setPopupConfig({
-        title: '10-Digit Phone Required',
-        message: 'Please enter an exact 10-digit phone number so buyers can reach you via the Call button.',
+        title: 'Phone Number Required',
+        message: 'Please add your 10-digit phone number in your Student Profile (Profile > Student Information) before posting an ad so buyers can call you.',
         type: 'warning',
-        confirmText: 'Got it'
+        confirmText: 'Go to Profile',
+        onConfirm: () => {
+          if (setActiveNav) setActiveNav('profile');
+        }
       });
       return;
     }
@@ -256,8 +317,8 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
         category: category.trim(),
         condition: condition.trim(),
         location: location.trim(),
-        phone: cleanPhone,
-        contactNumber: cleanPhone,
+        phone: savedStudentPhone,
+        contactNumber: savedStudentPhone,
         isNegotiable: Boolean(isNegotiable),
         images: finalImages,
         campusName: resolvedUni,
@@ -265,7 +326,7 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
       };
 
       if (typeof window !== 'undefined') {
-        localStorage.setItem('user_phone', cleanPhone);
+        localStorage.setItem('user_phone', savedStudentPhone);
       }
 
       const created = await createProductListing(payload);
@@ -282,6 +343,9 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
         setCategory('');
         setPhotos([]);
         setLocation('');
+        setIsTitleLimitSurpassed(false);
+        setIsLocationLimitSurpassed(false);
+        setIsDescLimitSurpassed(false);
 
         if (onAdCreated) {
           onAdCreated(created);
@@ -319,7 +383,7 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
         
         {/* 1. Header Bar: Left Logo + Black Title - BROUGHT DOWN CLEANLY WITH TOP SAFE PADDING */}
         <div className="pt-14 pb-3.5 px-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-30">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg shrink-0 overflow-hidden">
               <img 
                 src="/campus-buddy-CB-exact-vector (1).svg" 
@@ -431,11 +495,21 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
               <input 
                 type="text"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={handleTitleChange}
+                maxLength={MAX_TITLE_CHARS}
                 placeholder="e.g. MacBook Pro M1 2020"
-                className="w-full px-4 py-3.5 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] border border-slate-100/80"
+                className={`w-full px-4 py-3.5 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 border transition-all ${
+                  showTitleLimit
+                    ? 'border-rose-300 focus:ring-rose-400' 
+                    : 'border-slate-100/80 focus:ring-[#1944F1]'
+                }`}
                 required
               />
+              {showTitleLimit && (
+                <p className="text-[11px] text-rose-500 font-medium animate-fade-in">
+                  Limit reached: Title cannot exceed {MAX_TITLE_CHARS} characters
+                </p>
+              )}
             </div>
 
             {/* Category Field */}
@@ -541,26 +615,24 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
                 <span className="absolute left-4 top-3.5 text-xs text-slate-400 font-medium">₹</span>
                 <input 
                   type="text"
+                  inputMode="numeric"
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  onChange={handlePriceChange}
+                  maxLength={6}
                   placeholder="e.g. 450"
                   className={`w-full pl-8 pr-4 py-3.5 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 border transition-all ${
-                    parseFloat(String(price).replace(/[^0-9.]/g, '')) > 200000 
+                    parseInt(price || '0', 10) >= 200000 
                       ? 'border-rose-300 focus:ring-rose-400' 
                       : 'border-slate-100/80 focus:ring-[#1944F1]'
                   }`}
                   required
                 />
               </div>
-              <p className={`text-[11px] font-normal transition-colors ${
-                parseFloat(String(price).replace(/[^0-9.]/g, '')) > 200000 
-                  ? 'text-rose-500 font-medium' 
-                  : 'text-slate-400'
-              }`}>
-                {parseFloat(String(price).replace(/[^0-9.]/g, '')) > 200000 
-                  ? 'Price exceeds limit: only items up to ₹2,00,000 can be listed' 
-                  : 'Only items up to ₹2,00,000 can be listed'}
-              </p>
+              {parseInt(price || '0', 10) >= 200000 && (
+                <p className="text-[11px] text-rose-500 font-medium animate-fade-in">
+                  Limit reached: Maximum price is ₹2,00,000
+                </p>
+              )}
             </div>
 
             {/* Description Field */}
@@ -570,12 +642,23 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
               </label>
               <textarea 
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={handleDescriptionChange}
+                maxLength={MAX_DESC_CHARS}
                 placeholder="Describe your item's history, specs, and any flaws..."
                 rows={4}
-                className="w-full p-4 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] border border-slate-100/80 resize-none"
+                className={`w-full p-4 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 border resize-none transition-all no-scrollbar ${
+                  showDescLimit
+                    ? 'border-rose-300 focus:ring-rose-400' 
+                    : 'border-slate-100/80 focus:ring-[#1944F1]'
+                }`}
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 required
               />
+              {showDescLimit && (
+                <p className="text-[11px] text-rose-500 font-medium animate-fade-in">
+                  Limit reached: Description cannot exceed {MAX_DESC_CHARS} characters
+                </p>
+              )}
             </div>
 
             {/* Pickup Location Field */}
@@ -588,32 +671,24 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
                 <input 
                   type="text"
                   value={location}
-                  onChange={(e) => setLocation(e.target.value)}
+                  onChange={handleLocationChange}
+                  maxLength={MAX_LOCATION_CHARS}
                   placeholder="e.g. North Campus Library"
-                  className="w-full pl-11 pr-4 py-3.5 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] border border-slate-100/80"
+                  className={`w-full pl-11 pr-4 py-3.5 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 border transition-all ${
+                    showLocationLimit
+                      ? 'border-rose-300 focus:ring-rose-400' 
+                      : 'border-slate-100/80 focus:ring-[#1944F1]'
+                  }`}
                   required
                 />
               </div>
+              {showLocationLimit && (
+                <p className="text-[11px] text-rose-500 font-medium animate-fade-in">
+                  Limit reached: Pickup location cannot exceed {MAX_LOCATION_CHARS} characters
+                </p>
+              )}
             </div>
 
-            {/* Contact Phone Number Field */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-800 font-sans block">
-                Contact Number
-              </label>
-              <div className="relative">
-                <Phone className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
-                <input 
-                  type="tel"
-                  value={phone}
-                  maxLength={10}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  placeholder="10-digit Phone Number (e.g. 9876543210)"
-                  className="w-full pl-11 pr-4 py-3.5 bg-[#F5F3F3] text-slate-900 placeholder-slate-400 rounded-2xl text-xs font-normal focus:outline-none focus:ring-2 focus:ring-[#1944F1] border border-slate-100/80"
-                  required
-                />
-              </div>
-            </div>
 
             {/* Negotiable Card Toggle */}
             <div className="p-4 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-between mt-2">
@@ -671,126 +746,7 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
 
       </div>
 
-      {/* Bottom Navigation Dock */}
-      <div className="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100 px-7 py-2.5 flex items-center justify-between z-30 shadow-lg">
-        
-        {/* 1. Home Tab */}
-        <button
-          onClick={() => setActiveNav('home')}
-          className="flex flex-col items-center justify-center gap-1 py-0.5 px-2 transition-all group min-w-[50px]"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" className="transition-transform duration-200">
-            <path 
-              d="M2 12.2039C2 9.91549 2 8.77128 2.5192 7.82274C3.0384 6.87421 3.98695 6.28551 5.88403 5.10813L7.88403 3.86687C9.88939 2.62229 10.8921 2 12 2C13.1079 2 14.1106 2.62229 16.116 3.86687L18.116 5.10812C20.0131 6.28551 20.9616 6.87421 21.4808 7.82274C22 8.77128 22 9.91549 22 12.2039V13.725C22 17.6258 22 19.5763 20.8284 20.7881C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.7881C2 19.5763 2 17.6258 2 13.725V12.2039Z" 
-              fill={activeNav === 'home' ? primaryColor : 'none'} 
-              stroke={activeNav === 'home' ? primaryColor : inactiveColor} 
-              strokeWidth="1.5" 
-            />
-            <path 
-              d="M15 18H9" 
-              stroke={activeNav === 'home' ? '#FFFFFF' : inactiveColor} 
-              strokeWidth="1.5" 
-              strokeLinecap="round" 
-            />
-          </svg>
-          <span className={`text-[11px] transition-colors ${
-            activeNav === 'home' ? 'text-[#1944F1] font-semibold' : 'text-slate-400 font-medium'
-          }`}>
-            Home
-          </span>
-        </button>
 
-        {/* 2. Chats Tab */}
-        <button
-          onClick={() => setActiveNav('chats')}
-          className="flex flex-col items-center justify-center gap-1 py-0.5 px-2 transition-all group min-w-[50px]"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" className="transition-transform duration-200">
-            <path 
-              fillRule="evenodd" 
-              clipRule="evenodd" 
-              d="M12 2.75C6.89137 2.75 2.75 6.89137 2.75 12C2.75 13.4811 3.09753 14.8788 3.7148 16.1181C3.96254 16.6155 4.05794 17.2103 3.90163 17.7945L3.30602 20.0205C3.19663 20.4293 3.57066 20.8034 3.97949 20.694L6.20553 20.0984C6.78973 19.9421 7.38451 20.0375 7.88191 20.2852C9.12121 20.9025 10.5189 21.25 12 21.25C17.1086 21.25 21.25 17.1086 21.25 12C21.25 6.89137 17.1086 2.75 12 2.75Z" 
-              fill={activeNav === 'chats' ? primaryColor : 'none'} 
-              stroke={activeNav === 'chats' ? primaryColor : inactiveColor} 
-              strokeWidth="1.4" 
-            />
-            <path d="M8 10.5H16" stroke={activeNav === 'chats' ? '#FFFFFF' : inactiveColor} strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M8 14H13.5" stroke={activeNav === 'chats' ? '#FFFFFF' : inactiveColor} strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          <span className={`text-[11px] transition-colors ${
-            activeNav === 'chats' ? 'text-[#1944F1] font-semibold' : 'text-slate-400 font-medium'
-          }`}>
-            Chats
-          </span>
-        </button>
-
-        {/* 3. Floating Center Sell Button */}
-        <div className="-mt-6 flex flex-col items-center justify-center px-1">
-          <button
-            onClick={() => setActiveNav('sell')}
-            className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95 p-2 ${
-              activeNav === 'sell'
-                ? 'bg-[#1944F1] text-white shadow-blue-500/30 ring-2 ring-blue-400/30 scale-105'
-                : 'bg-[#1944F1]/90 text-white shadow-blue-500/20 opacity-80'
-            }`}
-          >
-            <img src="/add-ellipse-svgrepo-com.svg" alt="Sell" className="w-6.5 h-6.5 filter brightness-0 invert" />
-          </button>
-          <span className={`text-[11px] block text-center mt-0.5 transition-colors ${
-            activeNav === 'sell' ? 'text-[#1944F1] font-semibold' : 'text-slate-400 font-medium'
-          }`}>
-            Sell
-          </span>
-        </div>
-
-        {/* 4. My Ads Tab */}
-        <button
-          onClick={() => setActiveNav('myads')}
-          className="flex flex-col items-center justify-center gap-1 py-0.5 px-2 transition-all group min-w-[50px]"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" className="transition-transform duration-200">
-            <g fill={activeNav === 'myads' ? primaryColor : inactiveColor}>
-              <path fillRule="evenodd" clipRule="evenodd" d="M5.25 14.5001C5.25 14.0858 5.58579 13.7501 6 13.7501H14C14.4142 13.7501 14.75 14.0858 14.75 14.5001C14.75 14.9143 14.4142 15.2501 14 15.2501H6C5.58579 15.2501 5.25 14.9143 5.25 14.5001Z" />
-              <path fillRule="evenodd" clipRule="evenodd" d="M5.25 18C5.25 17.5858 5.58579 17.25 6 17.25H11.5C11.9142 17.25 12.25 17.5858 12.25 18C12.25 18.4143 11.9142 18.75 11.5 18.75H6C5.58579 18.75 5.25 18.4143 5.25 18Z" />
-              <path fillRule="evenodd" clipRule="evenodd" d="M12.25 2.83422C11.7896 2.75598 11.162 2.75005 10.0298 2.75005C8.11311 2.75005 6.75075 2.75163 5.71785 2.88987C4.70596 3.0253 4.12453 3.27933 3.7019 3.70195C3.27869 4.12516 3.02502 4.70481 2.88976 5.7109C2.75159 6.73856 2.75 8.09323 2.75 10.0001V14.0001C2.75 15.9069 2.75159 17.2615 2.88976 18.2892C3.02502 19.2953 3.27869 19.8749 3.7019 20.2981C4.12511 20.7214 4.70476 20.975 5.71085 21.1103C6.73851 21.2485 8.09318 21.2501 10 21.2501H14C15.9068 21.2501 17.2615 21.2485 18.2892 21.1103C19.2952 20.975 19.8749 20.7214 20.2981 20.2981C20.7213 19.8749 20.975 19.2953 21.1102 18.2892C21.2484 17.2615 21.25 15.9069 21.25 14.0001V13.5629C21.25 12.0269 21.2392 11.2988 21.0762 10.7501H17.9463C16.8135 10.7501 15.8877 10.7501 15.1569 10.6518C14.3929 10.5491 13.7306 10.3268 13.2019 9.79815C12.6732 9.26945 12.4509 8.60712 12.3482 7.84317C12.25 7.1123 12.25 6.18657 12.25 5.05374V2.83422ZM13.75 3.6095V5.00005C13.75 6.19976 13.7516 7.0241 13.8348 7.64329C13.9152 8.24091 14.059 8.53395 14.2626 8.73749C14.4661 8.94103 14.7591 9.08486 15.3568 9.16521C15.976 9.24846 16.8003 9.25005 18 9.25005H20.0195C19.723 8.9625 19.3432 8.61797 18.85 8.17407L14.8912 4.61117C14.4058 4.17433 14.0446 3.85187 13.75 3.6095ZM10.1755 1.25002C11.5601 1.24965 12.4546 1.24942 13.2779 1.56535C14.1012 1.88129 14.7632 2.47735 15.7873 3.39955C15.8226 3.43139 15.8584 3.46361 15.8947 3.49623L19.8534 7.05912C19.8956 7.09705 19.9372 7.1345 19.9783 7.17149C21.162 8.23614 21.9274 8.92458 22.3391 9.84902C22.7508 10.7734 22.7505 11.8029 22.75 13.3949C22.75 13.4502 22.75 13.5062 22.75 13.5629V14.0565C22.75 15.8942 22.75 17.3499 22.5969 18.4891C22.4392 19.6615 22.1071 20.6104 21.3588 21.3588C20.6104 22.1072 19.6614 22.4393 18.489 22.5969C17.3498 22.7501 15.8942 22.7501 14.0564 22.7501H9.94359C8.10583 22.7501 6.65019 22.7501 5.51098 22.5969C4.33856 22.4393 3.38961 22.1072 2.64124 21.3588C1.89288 20.6104 1.56076 19.6615 1.40314 18.4891C1.24997 17.3499 1.24998 15.8942 1.25 14.0565V9.94363C1.24998 8.10587 1.24997 6.65024 1.40314 5.51103C1.56076 4.33861 1.89288 3.38966 2.64124 2.64129C3.39019 1.89235 4.34232 1.56059 5.51887 1.40313C6.66283 1.25002 8.1257 1.25003 9.97352 1.25005L10.0298 1.25005C10.0789 1.25005 10.1275 1.25004 10.1755 1.25002Z" />
-          </g>
-        </svg>
-        <span className={`text-[11px] transition-colors ${
-          activeNav === 'myads' ? 'text-[#1944F1]' : '#94A3B8'
-        }`}>
-          My Ads
-        </span>
-      </button>
-
-      {/* 5. Profile Tab */}
-      <button
-        onClick={() => setActiveNav('profile')}
-        className="flex flex-col items-center justify-center gap-1 py-0.5 px-2 transition-all group min-w-[50px]"
-      >
-        <svg width="20" height="20" viewBox="0 0 32 32" className="transition-transform duration-200">
-          <g id="about">
-            <path 
-              d="M16,16A7,7,0,1,0,9,9,7,7,0,0,0,16,16Z" 
-              fill={activeNav === 'profile' ? primaryColor : 'none'} 
-              stroke={activeNav === 'profile' ? primaryColor : inactiveColor} 
-              strokeWidth="1.8" 
-            />
-            <path 
-              d="M17,18H15A11,11,0,0,0,4,29a1,1,0,0,0,1,1H27a1,1,0,0,0,1-1A11,11,0,0,0,17,18Z" 
-              fill={activeNav === 'profile' ? primaryColor : 'none'} 
-              stroke={activeNav === 'profile' ? primaryColor : inactiveColor} 
-              strokeWidth="1.8" 
-            />
-          </g>
-        </svg>
-        <span className={`text-[11px] transition-colors ${
-          activeNav === 'profile' ? 'text-[#1944F1] font-semibold' : 'text-slate-400 font-medium'
-        }`}>
-          Profile
-        </span>
-      </button>
-
-    </div>
 
       {/* Wishlist Drawer Modal */}
       <AnimatePresence>
@@ -862,8 +818,14 @@ export default function SellScreen({ user, activeNav, setActiveNav, favorites = 
         type={popupConfig?.type || 'warning'}
         confirmText={popupConfig?.confirmText || 'OK'}
         isAlert={true}
-        onConfirm={() => setPopupConfig(null)}
-        onCancel={() => setPopupConfig(null)}
+        onConfirm={() => {
+          if (popupConfig?.onConfirm) popupConfig.onConfirm();
+          setPopupConfig(null);
+        }}
+        onCancel={() => {
+          if (popupConfig?.onCancel) popupConfig.onCancel();
+          setPopupConfig(null);
+        }}
       />
     </motion.div>
   );

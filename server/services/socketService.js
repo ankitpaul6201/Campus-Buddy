@@ -51,7 +51,7 @@ function initSocket(httpServer) {
         return next(new Error('Authentication required'));
       }
 
-      const secret = process.env.JWT_SECRET || 'campus_buddy_super_secret_jwt_key_2026_token_auth';
+      const secret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('FATAL: JWT_SECRET environment variable is missing.'); })() : 'campus_buddy_dev_jwt_secret');
       const decoded = jwt.verify(token, secret);
       socket.user = decoded;
       next();
@@ -88,12 +88,25 @@ function initSocket(httpServer) {
       socket.emit('presence:init', Array.from(onlineUsers.keys()));
     });
 
-    // Join conversation room for active real-time chatting
-    socket.on('conversation:join', (conversationId) => {
+    // Join conversation room for active real-time chatting (authorized participants only)
+    socket.on('conversation:join', async (conversationId) => {
       if (conversationId) {
-        const room = `conversation_${conversationId}`;
-        socket.join(room);
-        console.log(`💬 [Socket.io] User ${userId} joined room: ${room}`);
+        try {
+          const Conversation = require('../models/Conversation');
+          const isParticipant = await Conversation.exists({
+            _id: conversationId,
+            participants: userId
+          });
+          if (isParticipant) {
+            const room = `conversation_${conversationId}`;
+            socket.join(room);
+            console.log(`💬 [Socket.io] User ${userId} joined room: ${room}`);
+          } else {
+            console.warn(`⚠️ [Socket.io] Unauthorized room join attempt rejected: User ${userId} -> conversation_${conversationId}`);
+          }
+        } catch (err) {
+          console.warn('Socket conversation:join authorization error:', err.message);
+        }
       }
     });
 
@@ -134,6 +147,21 @@ function initSocket(httpServer) {
                 readBy: userId
               });
             }
+
+            // Also dismiss chat notifications for this conversation
+            const Notification = require('../models/Notification');
+            const deletedRes = await Notification.deleteMany({
+              recipient: userId,
+              type: 'message',
+              conversation: conversationId
+            });
+            if (deletedRes.deletedCount > 0) {
+              const unreadNotifCount = await Notification.countDocuments({
+                recipient: userId,
+                read: false
+              });
+              emitToUser(userId, 'notification:unread_count', { unreadCount: unreadNotifCount });
+            }
           }
         } catch (err) {
           console.warn('Socket conversation:read error:', err.message);
@@ -141,15 +169,26 @@ function initSocket(httpServer) {
       }
     });
 
-    // Handle typing status broadcast in conversation
-    socket.on('conversation:typing', ({ conversationId, isTyping }) => {
+    // Handle typing status broadcast in conversation (authorized participants only)
+    socket.on('conversation:typing', async ({ conversationId, isTyping }) => {
       if (conversationId) {
-        socket.to(`conversation_${conversationId}`).emit('conversation:typing', {
-          conversationId,
-          userId,
-          fullName: socket.user.fullName,
-          isTyping
-        });
+        try {
+          const Conversation = require('../models/Conversation');
+          const isParticipant = await Conversation.exists({
+            _id: conversationId,
+            participants: userId
+          });
+          if (isParticipant) {
+            socket.to(`conversation_${conversationId}`).emit('conversation:typing', {
+              conversationId,
+              userId,
+              fullName: socket.user.fullName,
+              isTyping
+            });
+          }
+        } catch (err) {
+          console.warn('Socket conversation:typing authorization error:', err.message);
+        }
       }
     });
 

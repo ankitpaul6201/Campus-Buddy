@@ -11,8 +11,8 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// @route   POST /api/auth/upload-id
-router.post('/upload-id', upload.single('studentId'), authController.uploadStudentId);
+// @route   POST /api/auth/upload-id (rate-limited)
+router.post('/upload-id', authLimiter, upload.single('studentId'), authController.uploadStudentId);
 
 // @route   POST /api/auth/signup (rate-limited)
 router.post('/signup', authLimiter, authController.signup);
@@ -43,5 +43,14 @@ router.post('/reset-password', authLimiter, authController.resetPassword);
 
 // @route   DELETE /api/auth/me (Account deletion & data purge)
 router.delete('/me', authMiddleware, authController.deleteAccount);
+
+// @route   GET /api/auth/student/:id (Student profile for ad details & seller info)
+router.get('/student/:id', authController.getStudentProfile);
+
+// @route   POST /api/auth/seller/:id/rating (Submit peer seller rating)
+router.post('/seller/:id/rating', authMiddleware, authController.submitSellerRating);
+
+// @route   GET /api/auth/seller/:id/ratings (Get peer seller ratings)
+router.get('/seller/:id/ratings', authController.getSellerRatingsEndpoint);
 
 module.exports = router;

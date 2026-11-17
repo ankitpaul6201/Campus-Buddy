@@ -14,6 +14,19 @@ const { initSocket } = require('./services/socketService');
 const app = express();
 const httpServer = http.createServer(app);
 
+// 0. Security Configuration & Proxy Trust
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+
+// Security Headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
 // Initialize real-time Socket.io engine
 const io = initSocket(httpServer);
 
@@ -57,6 +70,10 @@ app.use(cors({
       return callback(new Error('Blocked by CORS policy: Origin not allowed'));
     }
 
+    if (process.env.NODE_ENV === 'production') {
+      return callback(new Error('Blocked by CORS policy: Unrecognized origin in production'));
+    }
+
     // Default development fallback
     return callback(null, true);
   },
@@ -64,9 +81,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'x-correlation-id', 'x-cache-bypass', 'cache-control']
 }));
 
-// 4. Body Parser with generous limits to support mobile photo uploads
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// 4. Body Parser with protected payload limit
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // 5. General API Rate Limiting
 app.use('/api', apiLimiter);

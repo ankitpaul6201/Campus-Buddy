@@ -21,13 +21,36 @@ import SellScreen from './SellScreen';
 import MyAdsScreen from './MyAdsScreen';
 import ProfileScreen from './ProfileScreen';
 import WishlistScreen from './WishlistScreen';
+import EmptyState from './EmptyState';
 import { fetchProducts, formatRupeePrice, updateAdLikes, incrementAdViews, getOptimizedImageUrl } from '../lib/api';
 import { Skeleton } from './ui/skeleton';
 
-export default function HomeScreen({ user, activeNav, setActiveNav, favorites, setFavorites, notifications = [], userAds = [], onOpenChat, onNavigate, onSelectProduct, onInitialLoadComplete }) {
-  const [activeTab, setActiveTab] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+export default function HomeScreen({ 
+  user, 
+  activeNav, 
+  setActiveNav, 
+  favorites, 
+  setFavorites, 
+  notifications = [], 
+  userAds = [], 
+  onOpenChat, 
+  onNavigate, 
+  onSelectProduct, 
+  onInitialLoadComplete,
+  onOpenFilterSort,
+  filterState,
+  setFilterState
+}) {
+  const [localTab, setLocalTab] = useState('all');
+  const activeTab = filterState?.category || localTab;
+  const setActiveTab = (catId) => {
+    setLocalTab(catId);
+    if (setFilterState) {
+      setFilterState(prev => ({ ...prev, category: catId }));
+    }
+  };
 
+  const [searchQuery, setSearchQuery] = useState('');
   const userUniversity = user?.universityName || user?.university?.name || '';
 
   // Helper: Strictly verify an item belongs to the active student's campus
@@ -67,30 +90,44 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
       return [];
     }
   });
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [loadingProducts, setLoadingProducts] = useState(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('campus_products_cache') || '[]');
+      const uni = user?.universityName || user?.university?.name || '';
+      const hasForUni = Array.isArray(cached) && cached.some(p => p && isProductInUserUniversity(p, uni));
+      return !hasForUni;
+    } catch {
+      return true;
+    }
+  });
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Applied Filter & Sort State (active on listings)
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [appliedSort, setAppliedSort] = useState('recommended'); // 'recommended' | 'price_low' | 'price_high' | 'newest'
-  const [appliedMinPrice, setAppliedMinPrice] = useState('');
-  const [appliedMaxPrice, setAppliedMaxPrice] = useState('');
-  const [appliedCondition, setAppliedCondition] = useState('all'); // 'all' | 'like_new' | 'good' | 'fair' | 'new'
+  // Applied Filter & Sort State (from filterState if provided)
+  const appliedSort = filterState?.sort || 'recommended';
+  const appliedMinPrice = filterState?.minPrice || '';
+  const appliedMaxPrice = filterState?.maxPrice || '';
+  const appliedCondition = filterState?.condition || 'all';
 
-  // Staged / Draft Filter State (inside modal before 'Show Results' is clicked)
-  const [draftSort, setDraftSort] = useState('recommended');
-  const [draftMinPrice, setDraftMinPrice] = useState('');
-  const [draftMaxPrice, setDraftMaxPrice] = useState('');
-  const [draftCondition, setDraftCondition] = useState('all');
-  const [draftCategory, setDraftCategory] = useState('all');
+  const setAppliedSort = (val) => {
+    if (setFilterState) setFilterState(prev => ({ ...prev, sort: val }));
+  };
+  const setAppliedMinPrice = (val) => {
+    if (setFilterState) setFilterState(prev => ({ ...prev, minPrice: val }));
+  };
+  const setAppliedMaxPrice = (val) => {
+    if (setFilterState) setFilterState(prev => ({ ...prev, maxPrice: val }));
+  };
+  const setAppliedCondition = (val) => {
+    if (setFilterState) setFilterState(prev => ({ ...prev, condition: val }));
+  };
 
   useEffect(() => {
     let isMounted = true;
     const loadProducts = async () => {
       try {
-        setLoadingProducts(true);
-        // Clear previous university products immediately on campus change
-        setDbProducts([]);
+        if (!dbProducts || dbProducts.length === 0) {
+          setLoadingProducts(true);
+        }
         const data = await fetchProducts(userUniversity);
         if (isMounted) {
           const strictlyFiltered = Array.isArray(data)
@@ -137,41 +174,22 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
   const hasActiveFilters = activeFilterCount > 0;
 
   const handleOpenFilterModal = () => {
-    setDraftSort(appliedSort);
-    setDraftMinPrice(appliedMinPrice);
-    setDraftMaxPrice(appliedMaxPrice);
-    setDraftCondition(appliedCondition);
-    setDraftCategory(activeTab);
-    setIsFilterModalOpen(true);
-  };
-
-  const handleApplyFilters = () => {
-    setAppliedSort(draftSort);
-    setAppliedMinPrice(draftMinPrice);
-    setAppliedMaxPrice(draftMaxPrice);
-    setAppliedCondition(draftCondition);
-    setActiveTab(draftCategory);
-    setIsFilterModalOpen(false);
-  };
-
-  const handleResetDraftFilters = () => {
-    setDraftSort('recommended');
-    setDraftMinPrice('');
-    setDraftMaxPrice('');
-    setDraftCondition('all');
-    setDraftCategory('all');
-  };
-
-  const handleCloseFilterModal = () => {
-    setIsFilterModalOpen(false);
+    if (onOpenFilterSort) {
+      onOpenFilterSort();
+    }
   };
 
   const handleResetFilters = () => {
-    setAppliedSort('recommended');
-    setAppliedMinPrice('');
-    setAppliedMaxPrice('');
-    setAppliedCondition('all');
-    setActiveTab('all');
+    if (setFilterState) {
+      setFilterState({
+        sort: 'recommended',
+        minPrice: '',
+        maxPrice: '',
+        condition: 'all',
+        category: 'all'
+      });
+    }
+    setLocalTab('all');
     setSearchQuery('');
   };
 
@@ -461,7 +479,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
         </div>
 
         {/* Active Filter Chips Bar (Dismissible) */}
-        {(hasActiveFilters || searchQuery.trim()) && (
+        {hasActiveFilters && (
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 text-xs">
             {appliedSort !== 'recommended' && (
               <span className="px-2.5 py-1 rounded-full bg-blue-50 text-[#1944F1] font-semibold border border-blue-100 flex items-center gap-1 shrink-0">
@@ -481,18 +499,6 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
                 <button onClick={() => setAppliedCondition('all')} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
               </span>
             )}
-            {searchQuery.trim() && (
-              <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-semibold border border-slate-200 flex items-center gap-1 shrink-0">
-                <span>"{searchQuery}"</span>
-                <button onClick={() => setSearchQuery('')} className="hover:text-slate-900"><X className="w-3 h-3" /></button>
-              </span>
-            )}
-            <button
-              onClick={handleResetFilters}
-              className="text-[11px] font-bold text-slate-400 hover:text-slate-600 hover:underline shrink-0 px-1"
-            >
-              Clear all
-            </button>
           </div>
         )}
 
@@ -574,48 +580,24 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
         ) : filteredProducts.length === 0 ? (
           baseProducts.length === 0 ? (
             /* CLEAN EMPTY STATE WHEN NO LISTINGS YET FOR CAMPUS */
-            <div className="py-12 px-6 rounded-3xl bg-[#F5F3F3] border border-slate-100 flex flex-col items-center justify-center text-center space-y-3.5 shadow-2xs my-2">
-              <div className="w-16 h-16 rounded-full bg-blue-100/80 text-[#1944F1] flex items-center justify-center shadow-xs">
-                <ShoppingBag className="w-8 h-8" />
-              </div>
-              <div className="space-y-1">
-                <h4 className="text-base font-bold text-slate-900 font-sans">
-                  No Listings on {user?.universityName || user?.university?.name || 'Campus'} Yet
-                </h4>
-                <p className="text-xs text-slate-500 font-normal max-w-[260px] mx-auto leading-relaxed">
-                  Be the first student to post an item for sale on your campus marketplace!
-                </p>
-              </div>
-              <button
-                onClick={() => setActiveNav('sell')}
-                className="mt-1 px-6 py-3 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white text-xs font-bold shadow-md transition-all active:scale-95 inline-flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Sell an Item</span>
-              </button>
-            </div>
+            <EmptyState
+              type="home"
+              title={`No Listings on ${user?.universityName || user?.university?.name || 'Campus'} Yet`}
+              description="Be the first student to post an item for sale on your campus marketplace!"
+              actionLabel="Sell an Item"
+              actionIcon={Plus}
+              onAction={() => setActiveNav('sell')}
+            />
           ) : (
             /* NO RESULTS MATCHING FILTERS */
-            <div className="py-12 px-6 rounded-3xl bg-[#F5F3F3] border border-slate-100 flex flex-col items-center justify-center text-center space-y-3.5 shadow-2xs my-2">
-              <div className="w-14 h-14 rounded-full bg-blue-50 text-[#1944F1] flex items-center justify-center shadow-xs">
-                <Filter className="w-6 h-6" />
-              </div>
-              <div className="space-y-1">
-                <h4 className="text-base font-bold text-slate-900 font-sans">
-                  No Matching Listings
-                </h4>
-                <p className="text-xs text-slate-500 font-normal max-w-[240px] mx-auto leading-relaxed">
-                  No items matched your current filter criteria or search query.
-                </p>
-              </div>
-              <button
-                onClick={handleResetFilters}
-                className="mt-1 px-5 py-2.5 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white text-xs font-bold shadow-md transition-all active:scale-95 inline-flex items-center gap-1.5"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Clear All Filters</span>
-              </button>
-            </div>
+            <EmptyState
+              type="search"
+              title="No Matching Listings"
+              description="No items matched your current filter criteria or search query."
+              actionLabel="Clear All Filters"
+              actionIcon={RotateCcw}
+              onAction={handleResetFilters}
+            />
           )
         ) : (
           <div className="grid grid-cols-2 gap-3 w-full">
@@ -702,251 +684,7 @@ export default function HomeScreen({ user, activeNav, setActiveNav, favorites, s
 
       </div>
 
-      {/* 3. INTERACTIVE FILTER BOTTOM DRAWER */}
-      <AnimatePresence>
-        {isFilterModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={handleCloseFilterModal}
-            className="fixed inset-0 bg-slate-900/60 z-[100] flex flex-col justify-end backdrop-blur-xs"
-          >
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full bg-white rounded-t-[32px] sm:rounded-t-[36px] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
-            >
-              {/* Drawer Header */}
-              <div className="pt-3 pb-3 px-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10 shrink-0">
-                <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 top-2.5" />
-                <div className="flex items-center gap-2 pt-2">
-                  <h3 className="text-base font-bold text-slate-900 font-sans">Filter & Sort</h3>
-                </div>
-                <button
-                  onClick={handleCloseFilterModal}
-                  className="w-8 h-8 rounded-full bg-[#F5F3F3] hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
 
-              {/* Scrollable Filter Form */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-5 no-scrollbar text-left">
-                {/* 1. Sort Section */}
-                <div>
-                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
-                    Sort By
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: 'recommended', label: 'Recommended' },
-                      { id: 'price_low', label: 'Price: Low to High' },
-                      { id: 'price_high', label: 'Price: High to Low' },
-                      { id: 'newest', label: 'Newest First' },
-                    ].map(opt => {
-                      const isSel = draftSort === opt.id;
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => setDraftSort(opt.id)}
-                          className={`p-2.5 px-3 rounded-2xl text-xs border transition-all text-left flex items-center justify-between font-light ${isSel
-                              ? 'border-[#1944F1] bg-blue-50/70 text-[#1944F1] shadow-2xs'
-                              : 'border-slate-100 bg-[#F8FAFC] text-slate-600 hover:bg-slate-100'
-                            }`}
-                        >
-                          <span className="truncate font-light">{opt.label}</span>
-                          {isSel && <Check className="w-3.5 h-3.5 text-[#1944F1] shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 2. Price Range */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                      Price Range
-                    </label>
-                    {(draftMinPrice || draftMaxPrice) && (
-                      <button
-                        type="button"
-                        onClick={() => { setDraftMinPrice(''); setDraftMaxPrice(''); }}
-                        className="text-[11px] font-light text-[#1944F1] hover:underline"
-                      >
-                        Clear Price
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Quick price chips */}
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    {[
-                      { label: 'Under ₹1,000', min: '', max: '1000' },
-                      { label: '₹1,000 - ₹5,000', min: '1000', max: '5000' },
-                      { label: '₹5,000 - ₹25,000', min: '5000', max: '25000' },
-                      { label: '₹25,000 - ₹2,00,000', min: '25000', max: '200000' },
-                    ].map((preset, idx) => {
-                      const isPreset = draftMinPrice === preset.min && draftMaxPrice === preset.max;
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            if (isPreset) {
-                              setDraftMinPrice('');
-                              setDraftMaxPrice('');
-                            } else {
-                              setDraftMinPrice(preset.min);
-                              setDraftMaxPrice(preset.max);
-                            }
-                          }}
-                          className={`py-2 px-3 rounded-2xl text-xs border transition-all text-center font-light ${isPreset
-                              ? 'bg-[#1944F1] text-white border-[#1944F1] shadow-2xs'
-                              : 'bg-[#F8FAFC] border-slate-200 text-slate-600 hover:bg-slate-100'
-                            }`}
-                        >
-                          {preset.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Custom Min / Max inputs */}
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-3 text-xs font-light text-slate-400">₹</span>
-                      <input
-                        type="number"
-                        min="0"
-                        max="200000"
-                        placeholder="Min price (₹)"
-                        value={draftMinPrice}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '') {
-                            setDraftMinPrice('');
-                          } else {
-                            const num = Math.max(0, Math.min(200000, Number(val)));
-                            setDraftMinPrice(String(num));
-                          }
-                        }}
-                        className="w-full pl-7 pr-3 py-2.5 bg-[#F8FAFC] border border-slate-200 rounded-2xl text-xs font-light text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#1944F1]"
-                      />
-                    </div>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-3 text-xs font-light text-slate-400">₹</span>
-                      <input
-                        type="number"
-                        min="0"
-                        max="200000"
-                        placeholder="Max (up to ₹2,00,000)"
-                        value={draftMaxPrice}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '') {
-                            setDraftMaxPrice('');
-                          } else {
-                            const num = Math.max(0, Math.min(200000, Number(val)));
-                            setDraftMaxPrice(String(num));
-                          }
-                        }}
-                        className="w-full pl-7 pr-3 py-2.5 bg-[#F8FAFC] border border-slate-200 rounded-2xl text-xs font-light text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#1944F1]"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-light mt-1.5 px-0.5">
-                    <span>Min: ₹0</span>
-                    <span>Max limit: ₹2,00,000</span>
-                  </div>
-                </div>
-
-                {/* 3. Category Filter Inside Drawer */}
-                <div>
-                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
-                    Category
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {categories.map(cat => {
-                      const isSel = draftCategory === cat.id;
-                      return (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => setDraftCategory(cat.id)}
-                          className={`px-3.5 py-2 rounded-2xl text-xs border transition-all font-light ${isSel
-                              ? 'bg-[#1944F1] text-white border-[#1944F1] shadow-2xs'
-                              : 'bg-[#F8FAFC] border-slate-200 text-slate-600 hover:bg-slate-100'
-                            }`}
-                        >
-                          {cat.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 4. Condition */}
-                <div>
-                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
-                    Item Condition
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { id: 'all', label: 'All Conditions' },
-                      { id: 'new', label: 'New' },
-                      { id: 'like_new', label: 'Like New' },
-                      { id: 'good', label: 'Good' },
-                      { id: 'fair', label: 'Fair' },
-                    ].map(cond => {
-                      const isSel = draftCondition === cond.id;
-                      return (
-                        <button
-                          key={cond.id}
-                          type="button"
-                          onClick={() => setDraftCondition(cond.id)}
-                          className={`px-3.5 py-2 rounded-2xl text-xs border transition-all font-light ${isSel
-                              ? 'bg-[#1944F1] text-white border-[#1944F1] shadow-2xs'
-                              : 'bg-[#F8FAFC] border-slate-200 text-slate-600 hover:bg-slate-100'
-                            }`}
-                        >
-                          {cond.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Sticky Action Bar */}
-              <div className="p-4 px-6 border-t border-slate-100 bg-white flex items-center gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleResetDraftFilters}
-                  className="flex-1 py-3 px-4 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-light text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reset</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApplyFilters}
-                  className="flex-[2] py-3 px-4 rounded-2xl bg-[#1944F1] hover:bg-[#0D30BA] text-white font-light text-xs shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Show Results</span>
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* 4. PRODUCT DETAILS BOTTOM DRAWER */}
       <AnimatePresence>
