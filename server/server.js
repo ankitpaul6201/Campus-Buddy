@@ -8,7 +8,6 @@ const { connectDB, closeDB } = require('./config/db');
 const { performanceMiddleware } = require('./middleware/performance');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
-const { recordActivity, initKeepAlive, getKeepAliveStatus } = require('./services/keepAliveService');
 const { initSocket } = require('./services/socketService');
 
 const app = express();
@@ -30,8 +29,7 @@ app.use((req, res, next) => {
 // Initialize real-time Socket.io engine
 const io = initSocket(httpServer);
 
-// 1. Anti-Sleep Activity Tracker & Performance Tracking
-app.use(recordActivity);
+// 1. Performance Tracking
 app.use(performanceMiddleware);
 
 // 2. Gzip/Deflate Payload Compression
@@ -126,8 +124,6 @@ connectDB()
   .then(() => {
     httpServer.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Campus Buddy High-Performance Server running on http://0.0.0.0:${PORT} (REST + WebSockets)`);
-      // Start background keep-alive anti-sleep supervisor (checks every 60s, pings if idle >= 9m)
-      initKeepAlive(PORT, 9);
     });
   })
   .catch((err) => {

@@ -3,14 +3,12 @@ const router = express.Router();
 const db = require('../config/db');
 const cacheService = require('../cache/cacheService');
 const { getSystemMetrics } = require('../middleware/performance');
-const { getKeepAliveStatus } = require('../services/keepAliveService');
 
-// Liveness check (instant response for load balancers and anti-sleep supervisor)
+// Liveness check (instant response for load balancers and health monitoring)
 router.get('/', (req, res) => {
   res.json({
     status: 'ok',
     app: 'Campus Buddy API Server',
-    keepAlive: getKeepAliveStatus(),
     timestamp: new Date().toISOString()
   });
 });
